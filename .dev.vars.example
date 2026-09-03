@@ -1,5 +1,5 @@
 AUTH_PEPPER=replace_with_a_long_random_secret
-ADMIN_HOST=admin.example.com
-PASSKEY_RP_ID=example.com
-PASSKEY_RP_NAME=Agentic Inbox
+ADMIN_HOST=admin.hacktivlabs.io
+PASSKEY_RP_ID=hacktivlabs.io
+PASSKEY_RP_NAME=Agentic Mailbox
 MCP_ADMIN_TOKEN=replace_with_a_long_random_token

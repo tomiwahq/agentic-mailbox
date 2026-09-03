@@ -71,7 +71,7 @@ export default function ComposePanel() {
 							<div className="flex-1 flex items-center gap-2 min-w-0">
 								<Input
 									type="text"
-									placeholder="recipient@example.com"
+									placeholder="recipient@hacktivlabs.io"
 									size="sm"
 									value={to}
 									onChange={(e) => setTo(e.target.value)}

@@ -6,8 +6,8 @@
  * Parse a Gmail-style search query into structured filters.
  *
  * Supported operators:
- *   from:user@example.com    — filter by sender
- *   to:user@example.com      — filter by recipient
+ *   from:user@hacktivlabs.io    — filter by sender
+ *   to:user@hacktivlabs.io      — filter by recipient
  *   subject:hello             — filter by subject
  *   in:inbox / in:sent        — filter by folder
  *   is:unread / is:read       — filter by read status

@@ -63,7 +63,7 @@ function mcpResult(result: Record<string, unknown>) {
  */
 export class EmailMCP extends McpAgent<Env> {
 	server = new McpServer({
-		name: "agentic-inbox",
+		name: "agentic-mailbox",
 		version: "1.0.0",
 	});
 
@@ -100,7 +100,7 @@ export class EmailMCP extends McpAgent<Env> {
 			{
 				mailboxId: z
 					.string()
-					.describe("The mailbox email address (e.g. user@example.com)"),
+					.describe("The mailbox email address (e.g. user@hacktivlabs.io)"),
 				folder: z
 					.string()
 					.default(Folders.INBOX)

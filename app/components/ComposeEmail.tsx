@@ -54,7 +54,7 @@ export default function ComposeEmail() {
 							<Input
 								label="To"
 								type="text"
-								placeholder="recipient@example.com, another@example.com"
+								placeholder="recipient@hacktivlabs.io, another@tomiwahq.com"
 								size="sm"
 								value={to}
 								onChange={(e) => setTo(e.target.value)}

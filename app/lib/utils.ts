@@ -159,7 +159,7 @@ export function buildQuotedReplyBlock(
 	if (!body) return "";
 	const formattedDate = formatComposeDate(dateStr);
 	
-	// HTML-escape sender to prevent <john@example.com> from disappearing as a tag
+	// HTML-escape sender to prevent <john@hacktivlabs.io> from disappearing as a tag
 	const escapedSender = escapeHtml(sender);
 
 	// Sanitize the body to plain text to prevent stored XSS.
@@ -173,7 +173,7 @@ export function buildQuotedReplyBlock(
 
 /**
  * Rewrite CID references in email HTML to API URLs for inline images.
- * Replaces `src="cid:image001@example.com"` with the attachment API endpoint.
+ * Replaces `src="cid:image001@hacktivlabs.io"` with the attachment API endpoint.
  */
 export function rewriteInlineImages(
 	body: string,

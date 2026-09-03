@@ -232,7 +232,7 @@ export async function startRegistration(c: Context<{ Bindings: Env }>, realm: Re
 	if (!rpID) throw new Error("PASSKEY_RP_ID is required for passkeys");
 	const host = normalizeHost(c.req.header("host"));
 	const options = await generateRegistrationOptions({
-		rpName: c.env.PASSKEY_RP_NAME || "Agentic Inbox",
+		rpName: c.env.PASSKEY_RP_NAME || "Agentic Mailbox",
 		rpID,
 		userID: new TextEncoder().encode(accountId),
 		userName,
