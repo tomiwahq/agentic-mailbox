@@ -64,3 +64,16 @@ export interface Folder {
 	name: string;
 	unreadCount: number;
 }
+
+export interface SessionState {
+	authenticated: boolean;
+	tenant: { kind: "admin" | "domain" | "unknown"; domain?: string };
+	principal: { realm: "admin" | "user"; email: string; domain?: string } | null;
+}
+
+export interface AdminOverview {
+	totalMailboxes: number;
+	activeUserSessions: number;
+	activeUsers: number;
+	activeDomains: number;
+}

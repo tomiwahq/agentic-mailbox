@@ -15,7 +15,7 @@ import {
 import { EnvelopeIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { Link as RouterLink } from "react-router";
+import { Link as RouterLink, useNavigate } from "react-router";
 import api from "~/services/api";
 import {
 	useCreateMailbox,
@@ -30,6 +30,7 @@ export function meta() {
 
 export default function HomeRoute() {
 	const toastManager = useKumoToastManager();
+	const navigate = useNavigate();
 	const { data: mailboxes = [], refetch: refetchMailboxes, isFetched: mailboxesFetched } = useMailboxes();
 	const createMailbox = useCreateMailbox();
 	const deleteMailbox = useDeleteMailbox();
@@ -39,6 +40,15 @@ export default function HomeRoute() {
 		queryFn: () => api.getConfig(),
 		staleTime: Infinity, // config rarely changes
 	});
+	const { data: sessionData, isLoading: sessionLoading } = useQuery({
+		queryKey: ["session"],
+		queryFn: () => api.getSession(),
+	});
+
+	useEffect(() => {
+		if (sessionLoading || !sessionData) return;
+		if (!sessionData.authenticated) navigate("/login", { replace: true });
+	}, [sessionData, sessionLoading, navigate]);
 
 	const domains = configData?.domains ?? [];
 	const emailAddresses = configData?.emailAddresses ?? [];
@@ -137,7 +147,7 @@ export default function HomeRoute() {
 			}))
 		: mailboxes;
 
-	const isLoading = !configData;
+	const isLoading = !configData || sessionLoading;
 
 	return (
 		<div className="min-h-screen bg-kumo-recessed">
@@ -145,6 +155,10 @@ export default function HomeRoute() {
 				<div className="mb-8">
 					<div className="flex items-center justify-between">
 						<h1 className="text-2xl font-bold text-kumo-default">Mailboxes</h1>
+						<div className="flex items-center gap-2">
+						{sessionData?.principal?.realm === "admin" && (
+							<Button variant="secondary" onClick={() => navigate("/admin")}>Admin Console</Button>
+						)}
 						{!isConfigured && (
 							<Button
 								variant="primary"
@@ -154,6 +168,7 @@ export default function HomeRoute() {
 								New Mailbox
 							</Button>
 						)}
+						</div>
 					</div>
 					{domains.length > 0 && (
 						<p className="text-sm text-kumo-subtle mt-1">

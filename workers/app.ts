@@ -4,11 +4,13 @@
 
 import { routeAgentRequest } from "agents";
 import { Hono } from "hono";
-import { jwtVerify, createRemoteJWKSet } from "jose";
 import { createRequestHandler } from "react-router";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
 import type { Env } from "./types";
+import authRoutes from "./routes/auth";
+import adminRoutes from "./routes/admin";
+import { ensureAuthSchema, getAuthPrincipal, syncDomainsFromEnv } from "./lib/auth";
 
 export { MailboxDO } from "./durableObject";
 export { EmailAgent } from "./agent";
@@ -28,55 +30,12 @@ const requestHandler = createRequestHandler(
 	import.meta.env.MODE,
 );
 
-function getAccessUrls(teamDomain: string) {
-	const certsPath = "/cdn-cgi/access/certs";
-	const teamUrl = new URL(teamDomain);
-	const issuer = teamUrl.origin;
-	const certsUrl = teamUrl.pathname.endsWith(certsPath)
-		? teamUrl
-		: new URL(certsPath, issuer);
-
-	return { issuer, certsUrl };
-}
-
 // Main app that wraps the API and adds React Router fallback
 const app = new Hono<{ Bindings: Env }>();
 
-// Cloudflare Access JWT validation middleware (production only)
 app.use("*", async (c, next) => {
-	// Skip validation in development
-	if (import.meta.env.DEV) {
-		return next();
-	}
-
-	const { POLICY_AUD, TEAM_DOMAIN } = c.env;
-
-	// Fail closed in production if Access is not configured.
-	if (!POLICY_AUD || !TEAM_DOMAIN) {
-		return c.text(
-			"Cloudflare Access must be configured in production. Set POLICY_AUD and TEAM_DOMAIN.",
-			500,
-		);
-	}
-
-	const token = c.req.header("cf-access-jwt-assertion");
-	if (!token) {
-		return c.text("Missing required CF Access JWT", 403);
-	}
-
-	try {
-		const { issuer, certsUrl } = getAccessUrls(TEAM_DOMAIN);
-		const JWKS = createRemoteJWKSet(certsUrl);
-		await jwtVerify(token, JWKS, {
-			issuer,
-			audience: POLICY_AUD,
-		});
-	} catch {
-		return c.text("Invalid or expired Access token", 403);
-	}
-
-	// Authorization model note: once a teammate passes the shared Cloudflare
-	// Access policy, they can access all mailboxes in this app by design.
+	await ensureAuthSchema(c.env);
+	await syncDomainsFromEnv(c.env);
 	return next();
 });
 
@@ -84,14 +43,26 @@ app.use("*", async (c, next) => {
 // Must be before API routes and React Router catch-all
 const mcpHandler = EmailMCP.serve("/mcp", { binding: "EMAIL_MCP" });
 app.all("/mcp", async (c) => {
+	const principal = await getAuthPrincipal(c as any);
+	const token = c.req.header("x-mcp-token");
+	const tokenAllowed = Boolean(c.env.MCP_ADMIN_TOKEN && token && token === c.env.MCP_ADMIN_TOKEN);
+	if (principal && principal.realm !== "admin") return c.json({ error: "MCP is admin-only" }, 403);
+	if (!principal && !tokenAllowed) return c.json({ error: "Unauthorized" }, 401);
 	return mcpHandler.fetch(c.req.raw, c.env, c.executionCtx as ExecutionContext);
 });
 app.all("/mcp/*", async (c) => {
+	const principal = await getAuthPrincipal(c as any);
+	const token = c.req.header("x-mcp-token");
+	const tokenAllowed = Boolean(c.env.MCP_ADMIN_TOKEN && token && token === c.env.MCP_ADMIN_TOKEN);
+	if (principal && principal.realm !== "admin") return c.json({ error: "MCP is admin-only" }, 403);
+	if (!principal && !tokenAllowed) return c.json({ error: "Unauthorized" }, 401);
 	return mcpHandler.fetch(c.req.raw, c.env, c.executionCtx as ExecutionContext);
 });
 
 // Mount the API routes
 app.route("/", apiApp);
+app.route("/", authRoutes);
+app.route("/", adminRoutes);
 
 // Agent WebSocket routing - must be before React Router catch-all
 app.all("/agents/*", async (c) => {

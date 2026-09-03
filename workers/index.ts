@@ -20,6 +20,7 @@ import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
+import { getAuthPrincipal, mailboxDomain, resolveTenant } from "./lib/auth";
 
 type AppContext = Context<MailboxContext>;
 
@@ -82,6 +83,14 @@ app.use("/api/*", cors({
 	},
 }));
 app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
+app.use("/api/v1/*", async (c, next) => {
+	if (c.req.path.startsWith("/api/v1/auth/") || c.req.path.startsWith("/api/v1/admin/")) {
+		return next();
+	}
+	const principal = await getAuthPrincipal(c as any);
+	if (!principal) return c.json({ error: "Unauthorized" }, 401);
+	return next();
+});
 
 // -- Config ---------------------------------------------------------
 
@@ -96,12 +105,24 @@ app.get("/api/v1/config", (c) => {
 
 app.get("/api/v1/mailboxes", async (c) => {
 	const allMailboxes = await listMailboxes(c.env.BUCKET);
-	return c.json(allMailboxes.map((m) => ({ ...m, name: m.id })));
+	const principal = await getAuthPrincipal(c as any);
+	if (!principal) return c.json({ error: "Unauthorized" }, 401);
+	const visible = principal.realm === "admin" ? allMailboxes : allMailboxes.filter((m) => m.id.toLowerCase() === principal.email.toLowerCase());
+	return c.json(visible.map((m) => ({ ...m, name: m.id })));
 });
 
 app.post("/api/v1/mailboxes", async (c) => {
+	const principal = await getAuthPrincipal(c as any);
+	if (!principal) return c.json({ error: "Unauthorized" }, 401);
+	const tenant = resolveTenant(c.req.header("host"), c.env);
+	if (principal.realm !== "admin" && tenant.kind !== "domain") return c.json({ error: "Forbidden" }, 403);
 	const { name, settings, email: rawEmail } = CreateMailboxBody.parse(await c.req.json());
 	const email = rawEmail.toLowerCase();
+	if (principal.realm !== "admin") {
+		if (email !== principal.email || mailboxDomain(email) !== tenant.domain) {
+			return c.json({ error: "You can only create your own mailbox in this domain" }, 403);
+		}
+	}
 	const allowedAddresses = (c.env.EMAIL_ADDRESSES ?? []) as string[];
 	if (allowedAddresses.length > 0 && !allowedAddresses.map((a) => a.toLowerCase()).includes(email)) {
 		return c.json({ error: "Mailbox creation is restricted to configured EMAIL_ADDRESSES" }, 403);

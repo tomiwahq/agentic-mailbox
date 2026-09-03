@@ -10,6 +10,7 @@
 import { createMiddleware } from "hono/factory";
 import type { MailboxDO } from "../durableObject";
 import type { Env } from "../types";
+import { canAccessMailbox } from "./auth";
 
 export type MailboxContext = {
 	Bindings: Env;
@@ -22,6 +23,10 @@ export const requireMailbox = createMiddleware<MailboxContext>(async (c, next) =
 	const rawId = c.req.param("mailboxId");
 	if (!rawId) return c.json({ error: "Mailbox ID required" }, 400);
 	const mailboxId = decodeURIComponent(rawId);
+	const allowed = await canAccessMailbox(c as any, mailboxId);
+	if (!allowed) {
+		return c.json({ error: "Forbidden" }, 403);
+	}
 
 	// Verify mailbox exists
 	const key = `mailboxes/${mailboxId}.json`;

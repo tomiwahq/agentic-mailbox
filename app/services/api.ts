@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import type { Email, Folder, Mailbox } from "~/types";
+import type { AdminOverview, Email, Folder, Mailbox, SessionState } from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -98,6 +98,32 @@ const api = {
 	// Config
 	getConfig: () =>
 		get<{ domains: string[]; emailAddresses: string[] }>("/api/v1/config"),
+	getSession: () => get<SessionState>("/api/v1/auth/session"),
+	logout: () => post<{ ok: boolean }>("/api/v1/auth/logout"),
+	loginUserPassword: (localPart: string, password: string) =>
+		post<{ ok: boolean; email: string }>("/api/v1/auth/login/password", { localPart, password }),
+	loginAdminPassword: (email: string, password: string) =>
+		post<{ ok: boolean; email: string }>("/api/v1/admin/auth/login/password", { email, password }),
+	bootstrapAdmin: (email: string, password: string) =>
+		post<{ ok: boolean }>("/api/v1/admin/bootstrap", { email, password }),
+	startPasskeyLogin: (payload: { realm: "user" | "admin"; localPart?: string; adminEmail?: string }) =>
+		post<{ accountId: string; options: Record<string, unknown> }>("/api/v1/auth/passkey/login/options", payload),
+	verifyPasskeyLogin: (payload: { realm: "user" | "admin"; accountId: string; response: unknown }) =>
+		post<{ ok: boolean; email: string }>("/api/v1/auth/passkey/login/verify", payload),
+	startPasskeyRegistration: () =>
+		post<Record<string, unknown>>("/api/v1/auth/passkey/register/options"),
+	verifyPasskeyRegistration: (response: unknown) =>
+		post<{ ok: boolean }>("/api/v1/auth/passkey/register/verify", response),
+	createUser: (localPart: string, domain: string, password: string) =>
+		post<{ ok: boolean; email: string }>("/api/v1/admin/users", { localPart, domain, password }),
+	listAdminDomains: () => get<Array<{ domain: string; host: string; is_active: boolean; created_at: string }>>("/api/v1/admin/domains"),
+	createAdminDomain: (domain: string, host: string) =>
+		post<{ ok: boolean }>("/api/v1/admin/domains", { domain, host }),
+	adminOverview: () => get<AdminOverview>("/api/v1/admin/overview"),
+	adminListMailboxes: () => get<Mailbox[]>("/api/v1/admin/mailboxes"),
+	adminListUsers: () => get<Array<{ id: string; email: string; local_part: string; domain: string; is_active: boolean; created_at: string }>>("/api/v1/admin/users"),
+	lockUser: (id: string) => post<{ ok: boolean }>(`/api/v1/admin/users/${id}/lock`),
+	unlockUser: (id: string) => post<{ ok: boolean }>(`/api/v1/admin/users/${id}/unlock`),
 
 	// Mailboxes
 	listMailboxes: () => get<Mailbox[]>("/api/v1/mailboxes"),
