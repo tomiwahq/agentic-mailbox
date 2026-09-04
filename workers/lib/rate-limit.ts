@@ -22,15 +22,15 @@ export async function checkAuthRateLimit(
 ): Promise<string | null> {
 	const now = Date.now();
 	const row = await db
-		.prepare("SELECT window_start, count FROM auth_rate_limits WHERE key = ?")
+		.prepare("SELECT window_start, count FROM auth_rate_limits WHERE limit_key = ?")
 		.bind(key)
 		.first<{ window_start: number | string; count: number }>();
 
 	const windowStart = Number(row?.window_start || 0);
 	if (!row || !windowStart || now - windowStart >= windowMs) {
 		await db
-			.prepare("INSERT OR REPLACE INTO auth_rate_limits (key, window_start, count) VALUES (?, ?, 1)")
-			.bind(key, now)
+			.prepare("INSERT OR REPLACE INTO auth_rate_limits (limit_key, window_start, count) VALUES (?, ?, 1)")
+			.bind(key, String(now))
 			.run();
 		return null;
 	}
@@ -39,7 +39,7 @@ export async function checkAuthRateLimit(
 		return "Too many attempts. Try again in a few minutes.";
 	}
 
-	await db.prepare("UPDATE auth_rate_limits SET count = count + 1 WHERE key = ?").bind(key).run();
+	await db.prepare("UPDATE auth_rate_limits SET count = count + 1 WHERE limit_key = ?").bind(key).run();
 	return null;
 }
 

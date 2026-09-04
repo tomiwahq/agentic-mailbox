@@ -41,16 +41,14 @@ function secureCookie(c: Context<{ Bindings: Env }>) {
 	return proto === "https";
 }
 
-export async function ensureAuthSchema(env: Env) {
-	if (schemaReady) return;
-	await env.AUTH_DB.exec(`
-CREATE TABLE IF NOT EXISTS domains (
+const AUTH_SCHEMA_STATEMENTS = [
+	`CREATE TABLE IF NOT EXISTS domains (
   domain TEXT PRIMARY KEY,
   host TEXT NOT NULL UNIQUE,
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS user_accounts (
+)`,
+	`CREATE TABLE IF NOT EXISTS user_accounts (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   local_part TEXT NOT NULL,
@@ -59,9 +57,9 @@ CREATE TABLE IF NOT EXISTS user_accounts (
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_user_accounts_domain ON user_accounts(domain);
-CREATE TABLE IF NOT EXISTS admin_accounts (
+)`,
+	`CREATE INDEX IF NOT EXISTS idx_user_accounts_domain ON user_accounts(domain)`,
+	`CREATE TABLE IF NOT EXISTS admin_accounts (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
@@ -69,8 +67,8 @@ CREATE TABLE IF NOT EXISTS admin_accounts (
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS passkeys (
+)`,
+	`CREATE TABLE IF NOT EXISTS passkeys (
   id TEXT PRIMARY KEY,
   realm TEXT NOT NULL,
   account_id TEXT NOT NULL,
@@ -79,9 +77,9 @@ CREATE TABLE IF NOT EXISTS passkeys (
   counter INTEGER NOT NULL DEFAULT 0,
   transports TEXT,
   created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_passkeys_realm_account ON passkeys(realm, account_id);
-CREATE TABLE IF NOT EXISTS auth_challenges (
+)`,
+	`CREATE INDEX IF NOT EXISTS idx_passkeys_realm_account ON passkeys(realm, account_id)`,
+	`CREATE TABLE IF NOT EXISTS auth_challenges (
   id TEXT PRIMARY KEY,
   realm TEXT NOT NULL,
   account_id TEXT NOT NULL,
@@ -89,9 +87,9 @@ CREATE TABLE IF NOT EXISTS auth_challenges (
   host TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_auth_challenges_lookup ON auth_challenges(realm, account_id);
-CREATE TABLE IF NOT EXISTS sessions (
+)`,
+	`CREATE INDEX IF NOT EXISTS idx_auth_challenges_lookup ON auth_challenges(realm, account_id)`,
+	`CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   realm TEXT NOT NULL,
   account_id TEXT NOT NULL,
@@ -100,14 +98,29 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_realm_account ON sessions(realm, account_id);
-CREATE TABLE IF NOT EXISTS auth_rate_limits (
-  key TEXT PRIMARY KEY,
+)`,
+	`CREATE INDEX IF NOT EXISTS idx_sessions_realm_account ON sessions(realm, account_id)`,
+	`DROP TABLE IF EXISTS auth_rate_limits`,
+	`CREATE TABLE IF NOT EXISTS auth_rate_limits (
+  limit_key TEXT PRIMARY KEY,
   count INTEGER NOT NULL,
   window_start TEXT NOT NULL
-);
-`);
+)`,
+];
+
+export async function ensureAuthSchema(env: Env) {
+	if (schemaReady) return;
+	if (!env.AUTH_DB) {
+		throw new Error("AUTH_DB D1 binding is missing. Check wrangler.jsonc database_id.");
+	}
+	try {
+		for (const statement of AUTH_SCHEMA_STATEMENTS) {
+			await env.AUTH_DB.prepare(statement).run();
+		}
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		throw new Error(`AUTH_DB schema init failed: ${message}`);
+	}
 	schemaReady = true;
 }
 
