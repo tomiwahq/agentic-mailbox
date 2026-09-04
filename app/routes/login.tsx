@@ -15,6 +15,10 @@ export default function LoginRoute() {
 
 	useEffect(() => {
 		api.getSession().then((session) => {
+			if (session.tenant.kind === "admin") {
+				navigate(session.authenticated ? "/admin" : "/admin/login", { replace: true });
+				return;
+			}
 			if (session.tenant.kind === "domain" && session.tenant.domain) setDomain(session.tenant.domain);
 			if (session.authenticated) navigate("/", { replace: true });
 		});

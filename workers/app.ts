@@ -10,7 +10,7 @@ import { EmailMCP } from "./mcp";
 import type { Env } from "./types";
 import authRoutes from "./routes/auth";
 import adminRoutes from "./routes/admin";
-import { ensureAuthSchema, getAuthPrincipal, syncDomainsFromEnv } from "./lib/auth";
+import { ensureAuthSchema, getAuthPrincipal, resolveTenant, syncDomainsFromEnv } from "./lib/auth";
 
 export { MailboxDO } from "./durableObject";
 export { EmailAgent } from "./agent";
@@ -33,9 +33,26 @@ const requestHandler = createRequestHandler(
 // Main app that wraps the API and adds React Router fallback
 const app = new Hono<{ Bindings: Env }>();
 
+function isAdminPassthroughPath(path: string) {
+	return (
+		path === "/admin" ||
+		path.startsWith("/admin/") ||
+		path.startsWith("/api/") ||
+		path.startsWith("/mcp") ||
+		path.startsWith("/agents/") ||
+		path.startsWith("/assets/") ||
+		/\.[a-z0-9]+$/i.test(path)
+	);
+}
+
 app.use("*", async (c, next) => {
 	await ensureAuthSchema(c.env);
 	await syncDomainsFromEnv(c.env);
+	const tenant = resolveTenant(c.req.header("host"), c.env);
+	const path = new URL(c.req.url).pathname;
+	if (tenant.kind === "admin" && !isAdminPassthroughPath(path)) {
+		return c.redirect("/admin", 302);
+	}
 	return next();
 });
 

@@ -47,6 +47,10 @@ export default function HomeRoute() {
 
 	useEffect(() => {
 		if (sessionLoading || !sessionData) return;
+		if (sessionData.tenant.kind === "admin") {
+			navigate(sessionData.authenticated ? "/admin" : "/admin/login", { replace: true });
+			return;
+		}
 		if (!sessionData.authenticated) navigate("/login", { replace: true });
 	}, [sessionData, sessionLoading, navigate]);
 

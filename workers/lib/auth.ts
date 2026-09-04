@@ -147,23 +147,28 @@ export function resolveTenant(hostHeader: string | undefined, env: Env) {
 	return { kind: "unknown" as const, host };
 }
 
+// Workers WebCrypto rejects PBKDF2 iteration counts above 100_000.
+const PBKDF2_ITERATIONS = 100_000;
+
 export async function hashPassword(password: string, pepper: string) {
 	const enc = new TextEncoder();
 	const baseKey = await crypto.subtle.importKey("raw", enc.encode(password + pepper), "PBKDF2", false, ["deriveBits"]);
 	const salt = crypto.getRandomValues(new Uint8Array(16));
-	const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", iterations: 120_000, salt }, baseKey, 256);
+	const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", iterations: PBKDF2_ITERATIONS, salt }, baseKey, 256);
 	const hash = new Uint8Array(bits);
-	return `pbkdf2$120000$${btoa(String.fromCharCode(...salt))}$${btoa(String.fromCharCode(...hash))}`;
+	return `pbkdf2$${PBKDF2_ITERATIONS}$${btoa(String.fromCharCode(...salt))}$${btoa(String.fromCharCode(...hash))}`;
 }
 
 export async function verifyPassword(password: string, pepper: string, encoded: string) {
 	const [algo, iter, saltB64, hashB64] = encoded.split("$");
 	if (algo !== "pbkdf2" || !iter || !saltB64 || !hashB64) return false;
+	const iterations = Number(iter);
+	if (!Number.isFinite(iterations) || iterations < 1 || iterations > PBKDF2_ITERATIONS) return false;
 	const enc = new TextEncoder();
 	const baseKey = await crypto.subtle.importKey("raw", enc.encode(password + pepper), "PBKDF2", false, ["deriveBits"]);
 	const salt = Uint8Array.from(atob(saltB64), (c) => c.charCodeAt(0));
 	const expected = Uint8Array.from(atob(hashB64), (c) => c.charCodeAt(0));
-	const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", iterations: Number(iter), salt }, baseKey, expected.byteLength * 8);
+	const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", iterations, salt }, baseKey, expected.byteLength * 8);
 	const actual = new Uint8Array(bits);
 	if (actual.length !== expected.length) return false;
 	let diff = 0;
