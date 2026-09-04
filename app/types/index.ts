@@ -14,6 +14,9 @@ export interface MailboxSettings {
 	signature?: SignatureSettings;
 	autoReply?: { enabled: boolean; subject: string; message: string };
 	agentSystemPrompt?: string;
+	aliases?: string[];
+	autoDraft?: boolean;
+	loadRemoteImages?: boolean;
 }
 
 export interface Mailbox {
@@ -48,6 +51,7 @@ export interface Email {
 	participants?: string;
 	needs_reply?: boolean;
 	has_draft?: boolean;
+	delivery_status?: "queued" | "sent" | "failed" | null;
 }
 
 export interface Attachment {

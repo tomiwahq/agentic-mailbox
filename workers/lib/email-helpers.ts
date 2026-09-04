@@ -54,12 +54,14 @@ export function validateSender(
 	to: string | string[],
 	from: string | { email: string; name: string },
 	mailboxId: string,
+	aliases: string[] = [],
 ): { toStr: string; fromEmail: string; fromDomain: string } {
 	const toStr = (Array.isArray(to) ? to.join(", ") : to).toLowerCase();
 	const fromEmail = (typeof from === "string" ? from : from.email).toLowerCase();
 
-	if (fromEmail !== mailboxId.toLowerCase()) {
-		throw new SenderValidationError("From address must match the mailbox email address");
+	const allowed = new Set([mailboxId.toLowerCase(), ...aliases.map((a) => a.toLowerCase())]);
+	if (!allowed.has(fromEmail)) {
+		throw new SenderValidationError("From address must match the mailbox email address or an alias");
 	}
 
 	const fromDomain = fromEmail.split("@")[1];

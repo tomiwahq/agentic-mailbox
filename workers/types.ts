@@ -5,4 +5,5 @@
 export interface Env extends Cloudflare.Env {
 	AUTH_PEPPER: string;
 	MCP_ADMIN_TOKEN?: string;
+	BOOTSTRAP_SECRET?: string;
 }

@@ -2,8 +2,11 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import { Button } from "@cloudflare/kumo";
+import { useState } from "react";
 import EmailAttachmentList from "~/components/EmailAttachmentList";
 import EmailIframe from "~/components/EmailIframe";
+import { useMailbox } from "~/queries/mailboxes";
 import { formatDetailDate, rewriteInlineImages } from "~/lib/utils";
 import type { Email } from "~/types";
 
@@ -18,6 +21,9 @@ export default function SingleMessageView({
 	mailboxId,
 	onPreviewImage,
 }: SingleMessageViewProps) {
+	const { data: mailbox } = useMailbox(mailboxId);
+	const [loadRemoteImages, setLoadRemoteImages] = useState<boolean | null>(null);
+	const showRemoteImages = loadRemoteImages ?? Boolean(mailbox?.settings?.loadRemoteImages);
 	return (
 		<div className="flex flex-col h-full">
 			<div className="px-4 py-4 border-b border-kumo-line md:px-6">
@@ -40,7 +46,16 @@ export default function SingleMessageView({
 			</div>
 
 			<div className="flex-1 min-h-0">
+				{!showRemoteImages && (
+					<div className="px-4 py-2 border-b border-kumo-line md:px-6">
+						<Button variant="ghost" size="sm" onClick={() => setLoadRemoteImages(true)}>
+							Load images
+						</Button>
+					</div>
+				)}
 				<EmailIframe
+					mailboxId={mailboxId}
+					loadRemoteImages={showRemoteImages}
 					body={rewriteInlineImages(
 						email.body || "",
 						mailboxId || "",

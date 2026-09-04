@@ -10,6 +10,7 @@ export default function AdminLoginRoute() {
 	const [password, setPassword] = useState("");
 	const [bootstrapEmail, setBootstrapEmail] = useState("");
 	const [bootstrapPassword, setBootstrapPassword] = useState("");
+	const [bootstrapSecret, setBootstrapSecret] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -56,10 +57,11 @@ export default function AdminLoginRoute() {
 					<Text size="sm">First-time setup</Text>
 					<Input label="Bootstrap email" value={bootstrapEmail} onChange={(e) => setBootstrapEmail(e.target.value)} />
 					<Input type="password" label="Bootstrap password" value={bootstrapPassword} onChange={(e) => setBootstrapPassword(e.target.value)} />
+					<Input type="password" label="Bootstrap secret" value={bootstrapSecret} onChange={(e) => setBootstrapSecret(e.target.value)} />
 					<Button variant="ghost" onClick={async () => {
 						setError(null);
 						try {
-							await api.bootstrapAdmin(bootstrapEmail, bootstrapPassword);
+							await api.bootstrapAdmin(bootstrapEmail, bootstrapPassword, bootstrapSecret);
 						} catch (e) {
 							setError(e instanceof Error ? e.message : "Bootstrap failed");
 						}

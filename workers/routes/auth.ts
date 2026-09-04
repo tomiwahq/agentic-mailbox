@@ -16,6 +16,7 @@ import {
 	verifyPassword,
 } from "../lib/auth";
 import type { Env } from "../types";
+import { checkAuthRateLimit, clientIp } from "../lib/rate-limit";
 
 const UserPasswordLoginBody = z.object({
 	localPart: z.string().min(1),
@@ -51,6 +52,8 @@ app.post("/api/v1/auth/logout", async (c) => {
 
 app.post("/api/v1/auth/login/password", async (c) => {
 	await ensureAuthSchema(c.env);
+	const limited = await checkAuthRateLimit(c.env.AUTH_DB, `login:${clientIp(c.req.raw)}`);
+	if (limited) return c.json({ error: limited }, 429);
 	const tenant = resolveTenant(c.req.header("host"), c.env);
 	if (tenant.kind !== "domain") return c.json({ error: "Domain login is unavailable on this host" }, 403);
 	const body = UserPasswordLoginBody.parse(await c.req.json());
@@ -68,6 +71,8 @@ app.post("/api/v1/auth/login/password", async (c) => {
 
 app.post("/api/v1/admin/auth/login/password", async (c) => {
 	await ensureAuthSchema(c.env);
+	const limited = await checkAuthRateLimit(c.env.AUTH_DB, `admin-login:${clientIp(c.req.raw)}`);
+	if (limited) return c.json({ error: limited }, 429);
 	const body = AdminPasswordLoginBody.parse(await c.req.json());
 	const row = await c.env.AUTH_DB.prepare("SELECT * FROM admin_accounts WHERE email = ? AND is_active = 1")
 		.bind(body.email.toLowerCase())
@@ -136,7 +141,12 @@ app.post("/api/v1/auth/passkey/login/verify", async (c) => {
 
 app.post("/api/v1/admin/bootstrap", async (c) => {
 	await ensureAuthSchema(c.env);
-	const body = z.object({ email: z.string().email(), password: z.string().min(12) }).parse(await c.req.json());
+	const limited = await checkAuthRateLimit(c.env.AUTH_DB, `bootstrap:${clientIp(c.req.raw)}`, 5);
+	if (limited) return c.json({ error: limited }, 429);
+	if (!c.env.BOOTSTRAP_SECRET) return c.json({ error: "BOOTSTRAP_SECRET is not configured" }, 503);
+	const body = z.object({ email: z.string().email(), password: z.string().min(12), secret: z.string().optional() }).parse(await c.req.json());
+	const provided = c.req.header("x-bootstrap-secret") || body.secret || "";
+	if (provided !== c.env.BOOTSTRAP_SECRET) return c.json({ error: "Invalid bootstrap secret" }, 403);
 	const existing = await c.env.AUTH_DB.prepare("SELECT id FROM admin_accounts LIMIT 1").first();
 	if (existing) return c.json({ error: "Bootstrap already completed" }, 409);
 	const hash = await hashPassword(body.password, c.env.AUTH_PEPPER);

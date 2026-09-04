@@ -20,11 +20,6 @@
 		{
 			"binding": "AUTH_DB",
 			"database_name": "agentic-mailbox-auth",
-			"database_id": "replace-with-real-database-id"
-		},
-		{
-			"binding": "agentic_mailbox_auth",
-			"database_name": "agentic-mailbox-auth",
 			"database_id": "7f78aeff-8d7f-42dd-a79e-37178eb8836b"
 		}
 	],
@@ -39,15 +34,21 @@
 			"binding": "BUCKET",
 			"bucket_name": "agentic-mailbox",
 			"preview_bucket_name": "agentic-mailbox"
-		},
-		{
-			"bucket_name": "agentic-mailbox",
-			"binding": "agentic_mailbox"
 		}
 	],
 	"ai": {
 		"binding": "AI"
 	},
+	"routes": [
+		{ "pattern": "mailadmin.hacktivlabs.io", "custom_domain": true },
+		{ "pattern": "mail.hacktivlabs.io", "custom_domain": true },
+		{ "pattern": "mail.hacktivlabs.com", "custom_domain": true },
+		{ "pattern": "mail.teraboxx.com", "custom_domain": true },
+		{ "pattern": "mail.tomiwahq.com", "custom_domain": true },
+		{ "pattern": "mail.terajournal.com", "custom_domain": true },
+		{ "pattern": "mail.paprkit.app", "custom_domain": true },
+		{ "pattern": "mail.orbitreader.app", "custom_domain": true }
+	],
 	"durable_objects": {
 		"bindings": [
 			{

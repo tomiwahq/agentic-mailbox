@@ -104,8 +104,8 @@ const api = {
 		post<{ ok: boolean; email: string }>("/api/v1/auth/login/password", { localPart, password }),
 	loginAdminPassword: (email: string, password: string) =>
 		post<{ ok: boolean; email: string }>("/api/v1/admin/auth/login/password", { email, password }),
-	bootstrapAdmin: (email: string, password: string) =>
-		post<{ ok: boolean }>("/api/v1/admin/bootstrap", { email, password }),
+	bootstrapAdmin: (email: string, password: string, secret: string) =>
+		post<{ ok: boolean }>("/api/v1/admin/bootstrap", { email, password, secret }),
 	startPasskeyLogin: (payload: { realm: "user" | "admin"; localPart?: string; adminEmail?: string }) =>
 		post<{ accountId: string; options: Record<string, unknown> }>("/api/v1/auth/passkey/login/options", payload),
 	verifyPasskeyLogin: (payload: { realm: "user" | "admin"; accountId: string; response: unknown }) =>

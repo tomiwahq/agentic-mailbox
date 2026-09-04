@@ -15,8 +15,6 @@ import {
 	toolDraftEmail,
 	toolUpdateDraft,
 	toolDeleteEmail,
-	toolSendReply,
-	toolSendEmail,
 	toolMarkEmailRead,
 	toolMoveEmail,
 } from "../lib/tools";
@@ -59,7 +57,7 @@ function mcpResult(result: Record<string, unknown>) {
  *
  * Clients (ProtoAgent, Claude Code, Cursor, etc.) connect to the
  * `/mcp` endpoint and can list mailboxes, read/search emails,
- * draft replies, send messages, and manage folders.
+ * draft replies, and manage folders. Sending is UI-only.
  */
 export class EmailMCP extends McpAgent<Env> {
 	server = new McpServer({
@@ -307,79 +305,6 @@ export class EmailMCP extends McpAgent<Env> {
 				if (denied) return denied;
 				const result = await toolDeleteEmail(env, mailboxId, emailId);
 				return mcpResult(result);
-			},
-		);
-
-		// ── send_reply ─────────────────────────────────────────────
-		this.server.tool(
-			"send_reply",
-			"Send a reply to an email. Only call after drafting and getting confirmation.",
-			{
-				mailboxId: z.string().describe("The mailbox email address to send from"),
-				originalEmailId: z
-					.string()
-					.describe("The ID of the email being replied to"),
-				to: z.string().email().describe("Recipient email address"),
-				subject: z.string().describe("Subject line"),
-				bodyHtml: z.string().describe("The HTML body of the reply"),
-			},
-			async ({ mailboxId, originalEmailId, to, subject, bodyHtml }) => {
-				const denied = await verifyMailbox(mailboxId);
-				if (denied) return denied;
-				const result = await toolSendReply(env, mailboxId, {
-					originalEmailId,
-					to,
-					subject,
-					bodyHtml,
-				});
-				if ("error" in result) {
-					// Preserve the original MCP error format for send failures
-					if (typeof result.error === "string" && result.error.startsWith("Failed to send")) {
-						return {
-							content: [{ type: "text" as const, text: result.error }],
-							isError: true,
-						};
-					}
-					if (result.error === "Original email not found") {
-						return {
-							content: [{ type: "text" as const, text: "Original email not found" }],
-							isError: true,
-						};
-					}
-					return mcpResult(result);
-				}
-				return mcpText(result);
-			},
-		);
-
-		// ── send_email ─────────────────────────────────────────────
-		this.server.tool(
-			"send_email",
-			"Send a new email (not a reply). Only call after getting confirmation.",
-			{
-				mailboxId: z.string().describe("The mailbox email address to send from"),
-				to: z.string().email().describe("Recipient email address"),
-				subject: z.string().describe("Subject line"),
-				bodyHtml: z.string().describe("The HTML body of the email"),
-			},
-			async ({ mailboxId, to, subject, bodyHtml }) => {
-				const denied = await verifyMailbox(mailboxId);
-				if (denied) return denied;
-				const result = await toolSendEmail(env, mailboxId, {
-					to,
-					subject,
-					bodyHtml,
-				});
-				if ("error" in result) {
-					if (typeof result.error === "string" && result.error.startsWith("Failed to send")) {
-						return {
-							content: [{ type: "text" as const, text: result.error }],
-							isError: true,
-						};
-					}
-					return mcpResult(result);
-				}
-				return mcpText(result);
 			},
 		);
 

@@ -78,6 +78,11 @@ const FOLDER_EMPTY_STATES: Record<
 		description:
 			"Deleted emails will appear here. You can restore them or permanently delete them.",
 	},
+	[Folders.SPAM]: {
+		icon: <TrashIcon size={48} weight="thin" className="text-kumo-subtle" />,
+		title: "No spam",
+		description: "Messages classified as junk will appear here.",
+	},
 };
 
 function EmailListSkeleton() {
@@ -376,6 +381,12 @@ export default function EmailListRoute() {
 													<span className="shrink-0 text-xs text-kumo-destructive font-medium">
 														Draft
 													</span>
+												)}
+												{email.delivery_status === "queued" && (
+													<span className="shrink-0 text-xs text-kumo-subtle font-medium">Sending</span>
+												)}
+												{email.delivery_status === "failed" && (
+													<span className="shrink-0 text-xs text-kumo-destructive font-medium">Failed</span>
 												)}
 												{email.needs_reply && !email.has_draft && (
 													<Tooltip content="Needs reply" asChild>

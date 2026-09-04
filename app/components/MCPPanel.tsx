@@ -52,8 +52,6 @@ const TOOLS = [
 	{ name: "get_thread", desc: "Load a conversation thread" },
 	{ name: "search_emails", desc: "Search emails by query" },
 	{ name: "draft_reply", desc: "Draft a reply to an email" },
-	{ name: "send_reply", desc: "Send a reply" },
-	{ name: "send_email", desc: "Send a new email" },
 	{ name: "mark_email_read", desc: "Mark email as read/unread" },
 	{ name: "move_email", desc: "Move email to a folder" },
 ];

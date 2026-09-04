@@ -4,9 +4,12 @@
 
 import DOMPurify from "dompurify";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { rewriteRemoteImages } from "~/lib/utils";
 
 interface EmailIframeProps {
 	body: string;
+	mailboxId?: string;
+	loadRemoteImages?: boolean;
 	/** When true, iframe auto-sizes to content height instead of filling parent */
 	autoSize?: boolean;
 }
@@ -27,7 +30,7 @@ interface EmailIframeProps {
  * - A strict CSP meta tag blocks external resource loads inside the
  *   iframe as a defense-in-depth layer.
  */
-export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
+export default function EmailIframe({ body, mailboxId, loadRemoteImages = false, autoSize }: EmailIframeProps) {
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [height, setHeight] = useState(autoSize ? 100 : 0);
 
@@ -59,7 +62,12 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 		const iframe = iframeRef.current;
 		if (!iframe || !body) return;
 
-		const cleanBody = DOMPurify.sanitize(body, {
+		const prepared = mailboxId
+			? rewriteRemoteImages(body, mailboxId, loadRemoteImages)
+			: loadRemoteImages
+				? body
+				: rewriteRemoteImages(body, "", false);
+		const cleanBody = DOMPurify.sanitize(prepared, {
 			USE_PROFILES: { html: true },
 			FORBID_TAGS: ["style"],
 			ADD_ATTR: ["target"],
@@ -91,7 +99,7 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: cid: https:; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: cid: 'self'; script-src 'unsafe-inline';">
 <style>
 * { box-sizing: border-box; }
 html {
@@ -137,7 +145,7 @@ ul, ol { padding-left: 20px; margin: 4px 0; }
 </head>
 <body>${cleanBody}${heightScript}</body>
 </html>`;
-	}, [body, autoSize]);
+	}, [body, autoSize, mailboxId, loadRemoteImages]);
 
 	return (
 		<iframe

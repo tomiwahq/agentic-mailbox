@@ -168,4 +168,15 @@ export const mailboxMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_emails_folder_date ON emails(folder_id, date DESC);
         `,
 	},
+	{
+		name: "9_delivery_status_and_fts",
+		sql: `
+            ALTER TABLE emails ADD COLUMN delivery_status TEXT;
+            CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
+                subject, body, sender, recipient, cc, bcc, email_id UNINDEXED
+            );
+            INSERT INTO emails_fts(subject, body, sender, recipient, cc, bcc, email_id)
+            SELECT subject, body, sender, recipient, cc, bcc, id FROM emails;
+        `,
+	},
 ];

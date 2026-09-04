@@ -3,3 +3,4 @@ ADMIN_HOST=admin.hacktivlabs.io
 PASSKEY_RP_ID=hacktivlabs.io
 PASSKEY_RP_NAME=Agentic Mailbox
 MCP_ADMIN_TOKEN=replace_with_a_long_random_token
+BOOTSTRAP_SECRET=replace_with_a_one_time_bootstrap_secret

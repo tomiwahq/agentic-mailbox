@@ -11,8 +11,10 @@ import {
 	PencilSimpleIcon,
 	TrashIcon,
 } from "@phosphor-icons/react";
+import { useState } from "react";
 import EmailAttachmentList from "~/components/EmailAttachmentList";
 import EmailIframe from "~/components/EmailIframe";
+import { useMailbox } from "~/queries/mailboxes";
 import {
 	formatDetailDate,
 	formatShortDate,
@@ -68,6 +70,9 @@ export default function ThreadMessage({
 	onViewSource,
 	onPreviewImage,
 }: ThreadMessageProps) {
+	const { data: mailbox } = useMailbox(mailboxId);
+	const [loadRemoteImages, setLoadRemoteImages] = useState<boolean | null>(null);
+	const showRemoteImages = loadRemoteImages ?? Boolean(mailbox?.settings?.loadRemoteImages);
 	const isSelf = email.sender === mailboxEmail;
 	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : ""}`;
 	const senderLabel = isDraft ? "Draft reply" : isSelf ? "You" : email.sender;
@@ -157,7 +162,14 @@ export default function ThreadMessage({
 				</div>
 
 				<div className="md:ml-[42px]">
+					{!showRemoteImages && (
+						<Button variant="ghost" size="sm" className="mb-2" onClick={() => setLoadRemoteImages(true)}>
+							Load images
+						</Button>
+					)}
 					<EmailIframe
+						mailboxId={mailboxId}
+						loadRemoteImages={showRemoteImages}
 						body={rewriteInlineImages(
 							email.body || "",
 							mailboxId || "",

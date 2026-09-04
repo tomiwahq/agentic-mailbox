@@ -102,6 +102,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   last_seen_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_realm_account ON sessions(realm, account_id);
+CREATE TABLE IF NOT EXISTS auth_rate_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  window_start TEXT NOT NULL
+);
 `);
 	schemaReady = true;
 }
@@ -223,12 +228,22 @@ export async function canAccessMailbox(c: Context<{ Bindings: Env }>, mailboxId:
 	return principal.email === normalizedMailbox && principal.domain === mailboxDomain(normalizedMailbox);
 }
 
-function passkeyRpId(env: Env) {
-	return (env.PASSKEY_RP_ID || "").trim() || undefined;
+export function resolvePasskeyRpId(env: Env, hostHeader: string | undefined): string | undefined {
+	const host = normalizeHost(hostHeader);
+	const tenant = resolveTenant(hostHeader, env);
+	if (tenant.kind === "domain" && tenant.domain) return tenant.domain;
+	if (tenant.kind === "admin") {
+		const adminHost = normalizeHost(env.ADMIN_HOST);
+		const domains = (env.DOMAINS || "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
+		for (const domain of domains) {
+			if (adminHost === domain || adminHost.endsWith(`.${domain}`)) return domain;
+		}
+	}
+	return (env.PASSKEY_RP_ID || "").trim() || host || undefined;
 }
 
 export async function startRegistration(c: Context<{ Bindings: Env }>, realm: Realm, accountId: string, userName: string): Promise<PublicKeyCredentialCreationOptionsJSON> {
-	const rpID = passkeyRpId(c.env);
+	const rpID = resolvePasskeyRpId(c.env, c.req.header("host"));
 	if (!rpID) throw new Error("PASSKEY_RP_ID is required for passkeys");
 	const host = normalizeHost(c.req.header("host"));
 	const options = await generateRegistrationOptions({
@@ -252,7 +267,7 @@ export async function finishRegistration(
 	accountId: string,
 	response: RegistrationResponseJSON,
 ) {
-	const rpID = passkeyRpId(c.env);
+	const rpID = resolvePasskeyRpId(c.env, c.req.header("host"));
 	if (!rpID) throw new Error("PASSKEY_RP_ID is required for passkeys");
 	const host = normalizeHost(c.req.header("host"));
 	const challengeRow = await c.env.AUTH_DB.prepare(
@@ -283,7 +298,7 @@ export async function finishRegistration(
 }
 
 export async function startAuthentication(c: Context<{ Bindings: Env }>, realm: Realm, accountId: string): Promise<PublicKeyCredentialRequestOptionsJSON> {
-	const rpID = passkeyRpId(c.env);
+	const rpID = resolvePasskeyRpId(c.env, c.req.header("host"));
 	if (!rpID) throw new Error("PASSKEY_RP_ID is required for passkeys");
 	const credentials = await c.env.AUTH_DB.prepare("SELECT credential_id, transports FROM passkeys WHERE realm = ? AND account_id = ?").bind(realm, accountId).all<any>();
 	const options = await generateAuthenticationOptions({
@@ -308,7 +323,7 @@ export async function finishAuthentication(
 	accountId: string,
 	response: AuthenticationResponseJSON,
 ) {
-	const rpID = passkeyRpId(c.env);
+	const rpID = resolvePasskeyRpId(c.env, c.req.header("host"));
 	if (!rpID) throw new Error("PASSKEY_RP_ID is required for passkeys");
 	const row = await c.env.AUTH_DB.prepare("SELECT * FROM passkeys WHERE realm = ? AND account_id = ? AND credential_id = ?")
 		.bind(realm, accountId, response.id)

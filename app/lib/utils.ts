@@ -196,6 +196,18 @@ export function rewriteInlineImages(
 	return result;
 }
 
+/** Strip remote images, or rewrite them through the Worker proxy. */
+export function rewriteRemoteImages(body: string, mailboxId: string, loadRemote: boolean): string {
+	if (!body) return body;
+	return body.replace(
+		/(\s(?:src|background)=["'])(https?:\/\/[^"']+)(["'])/gi,
+		(_match, pre: string, url: string, post: string) => {
+			if (!loadRemote) return `${pre}${post}`;
+			return `${pre}/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/proxy-image?url=${encodeURIComponent(url)}${post}`;
+		},
+	);
+}
+
 export function getNonInlineAttachments(attachments?: Attachment[]): Attachment[] {
 	return attachments?.filter((attachment) => attachment.disposition !== "inline") ?? [];
 }

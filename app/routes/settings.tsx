@@ -20,12 +20,22 @@ export default function SettingsRoute() {
 
 	const [displayName, setDisplayName] = useState("");
 	const [agentPrompt, setAgentPrompt] = useState("");
+	const [signatureEnabled, setSignatureEnabled] = useState(false);
+	const [signatureText, setSignatureText] = useState("");
+	const [aliases, setAliases] = useState("");
+	const [autoDraft, setAutoDraft] = useState(true);
+	const [loadRemoteImages, setLoadRemoteImages] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
 
 	useEffect(() => {
 		if (mailbox) {
 			setDisplayName(mailbox.settings?.fromName || mailbox.name || "");
 			setAgentPrompt(mailbox.settings?.agentSystemPrompt || "");
+			setSignatureEnabled(Boolean(mailbox.settings?.signature?.enabled));
+			setSignatureText(mailbox.settings?.signature?.text || "");
+			setAliases((mailbox.settings?.aliases || []).join(", "));
+			setAutoDraft(mailbox.settings?.autoDraft !== false);
+			setLoadRemoteImages(Boolean(mailbox.settings?.loadRemoteImages));
 		}
 	}, [mailbox]);
 
@@ -36,6 +46,10 @@ export default function SettingsRoute() {
 			...mailbox.settings,
 			fromName: displayName,
 			agentSystemPrompt: agentPrompt.trim() || undefined,
+			signature: { enabled: signatureEnabled, text: signatureText },
+			aliases: aliases.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean),
+			autoDraft,
+			loadRemoteImages,
 		};
 		try {
 			await updateMailboxMutation.mutateAsync({ mailboxId, settings });
@@ -81,6 +95,32 @@ export default function SettingsRoute() {
 							onChange={(e) => setDisplayName(e.target.value)}
 						/>
 						<Input label="Email" type="email" value={mailbox.email} disabled />
+						<Input
+							label="Aliases"
+							value={aliases}
+							onChange={(e) => setAliases(e.target.value)}
+							placeholder="hello@hacktivlabs.io, team@hacktivlabs.io"
+						/>
+						<p className="text-xs text-kumo-subtle">Comma-separated From addresses that deliver into this mailbox.</p>
+						<label className="flex items-center gap-2 text-sm text-kumo-default">
+							<input type="checkbox" checked={signatureEnabled} onChange={(e) => setSignatureEnabled(e.target.checked)} />
+							Enable signature
+						</label>
+						<textarea
+							value={signatureText}
+							onChange={(e) => setSignatureText(e.target.value)}
+							rows={3}
+							placeholder="Sent from Agentic Mailbox"
+							className="w-full resize-y rounded-lg border border-kumo-line bg-kumo-recessed px-3 py-2 text-sm text-kumo-default"
+						/>
+						<label className="flex items-center gap-2 text-sm text-kumo-default">
+							<input type="checkbox" checked={autoDraft} onChange={(e) => setAutoDraft(e.target.checked)} />
+							Auto-draft replies to known correspondents
+						</label>
+						<label className="flex items-center gap-2 text-sm text-kumo-default">
+							<input type="checkbox" checked={loadRemoteImages} onChange={(e) => setLoadRemoteImages(e.target.checked)} />
+							Load remote images by default (proxied)
+						</label>
 					</div>
 				</div>
 

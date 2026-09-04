@@ -9,6 +9,7 @@ import type { SQL } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { Folders } from "../../shared/folders";
 import type { Env } from "../types";
+import { sanitizeFtsQuery } from "../lib/threading";
 import { applyMigrations, mailboxMigrations } from "./migrations";
 
 /**
@@ -87,6 +88,7 @@ interface EmailData {
 	thread_id?: string | null;
 	message_id?: string | null;
 	raw_headers?: string | null;
+	delivery_status?: string | null;
 }
 
 interface AttachmentData {
@@ -160,6 +162,7 @@ export class MailboxDO extends DurableObject<Env> {
 				email_references: schema.emails.email_references,
 				thread_id: schema.emails.thread_id,
 				folder_id: schema.emails.folder_id,
+				delivery_status: schema.emails.delivery_status,
 				snippet: sql<string>`SUBSTR(${schema.emails.body}, 1, 300)`,
 			})
 			.from(schema.emails)
@@ -556,6 +559,11 @@ export class MailboxDO extends DurableObject<Env> {
 			.delete(schema.emails)
 			.where(eq(schema.emails.id, id))
 			.run();
+		try {
+			this.ctx.storage.sql.exec(`DELETE FROM emails_fts WHERE email_id = ?1`, id);
+		} catch {
+			// FTS table may not exist on pre-migration mailboxes
+		}
 
 		return emailAttachments;
 	}
@@ -672,11 +680,11 @@ export class MailboxDO extends DurableObject<Env> {
 		};
 
 		if (query) {
-			const p1 = addParam(`%${query}%`);
-			const p2 = addParam(`%${query}%`);
-			const p3 = addParam(`%${query}%`);
-			const p4 = addParam(`%${query}%`);
-			conditions.push(`(${prefix}subject LIKE ${p1} OR ${prefix}body LIKE ${p2} OR ${prefix}sender LIKE ${p3} OR ${prefix}recipient LIKE ${p4} OR ${prefix}cc LIKE ${p4} OR ${prefix}bcc LIKE ${p4})`);
+			const match = sanitizeFtsQuery(query);
+			if (match) {
+				const p = addParam(match);
+				conditions.push(`${prefix}id IN (SELECT email_id FROM emails_fts WHERE emails_fts MATCH ${p})`);
+			}
 		}
 		if (folder) {
 			const p = addParam(folder);
@@ -862,11 +870,84 @@ export class MailboxDO extends DurableObject<Env> {
 				thread_id: email.thread_id ?? null,
 				message_id: email.message_id ?? null,
 				raw_headers: email.raw_headers ?? null,
+				delivery_status: email.delivery_status ?? null,
 			})
 			.run();
 
 		if (attachments.length > 0) {
 			this.db.insert(schema.attachments).values(attachments).run();
 		}
+
+		try {
+			this.ctx.storage.sql.exec(
+				`INSERT INTO emails_fts(subject, body, sender, recipient, cc, bcc, email_id)
+				 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+				email.subject ?? "",
+				email.body ?? "",
+				email.sender ?? "",
+				email.recipient ?? "",
+				email.cc ?? "",
+				email.bcc ?? "",
+				email.id,
+			);
+		} catch (e) {
+			console.warn("FTS index update failed:", (e as Error).message);
+		}
+	}
+
+	async updateDeliveryStatus(id: string, status: "queued" | "sent" | "failed") {
+		this.ctx.storage.sql.exec(
+			`UPDATE emails SET delivery_status = ?1 WHERE id = ?2`,
+			status,
+			id,
+		);
+	}
+
+	async findEmailByMessageId(messageId: string) {
+		const row = [
+			...this.ctx.storage.sql.exec(
+				`SELECT id, thread_id, message_id FROM emails
+				 WHERE message_id = ?1 OR id = ?1
+				 LIMIT 1`,
+				messageId,
+			),
+		][0] as { id: string; thread_id: string | null; message_id: string | null } | undefined;
+		return row ?? null;
+	}
+
+	async hasSentTo(address: string): Promise<boolean> {
+		const needle = `%${address.toLowerCase()}%`;
+		const row = [
+			...this.ctx.storage.sql.exec(
+				`SELECT 1 as ok FROM emails
+				 WHERE folder_id = ?1
+				   AND (LOWER(recipient) LIKE ?2 OR LOWER(cc) LIKE ?2 OR LOWER(bcc) LIKE ?2)
+				 LIMIT 1`,
+				Folders.SENT,
+				needle,
+			),
+		][0];
+		return Boolean(row);
+	}
+
+	async hasDraftForThread(threadId: string): Promise<boolean> {
+		const row = [
+			...this.ctx.storage.sql.exec(
+				`SELECT 1 as ok FROM emails WHERE folder_id = ?1 AND thread_id = ?2 LIMIT 1`,
+				Folders.DRAFT,
+				threadId,
+			),
+		][0];
+		return Boolean(row);
+	}
+
+	async listAllAttachmentKeys(): Promise<{ email_id: string; id: string; filename: string }[]> {
+		return [
+			...this.ctx.storage.sql.exec(`SELECT email_id, id, filename FROM attachments`),
+		] as { email_id: string; id: string; filename: string }[];
+	}
+
+	async destroyStorage() {
+		await this.ctx.storage.deleteAll();
 	}
 }
