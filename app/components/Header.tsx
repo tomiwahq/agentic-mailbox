@@ -4,9 +4,11 @@
 
 import { Button, Input, Tooltip } from "@cloudflare/kumo";
 import { GearSixIcon, ListIcon, MagnifyingGlassIcon, RobotIcon, XIcon } from "@phosphor-icons/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { useUIStore } from "~/hooks/useUIStore";
+import api from "~/services/api";
 
 export default function Header() {
 	const [searchQuery, setSearchQuery] = useState("");
@@ -16,6 +18,8 @@ export default function Header() {
 	const location = useLocation();
 	const [searchParams] = useSearchParams();
 	const { toggleSidebar, toggleAgentPanel, isAgentPanelOpen } = useUIStore();
+	const queryClient = useQueryClient();
+	const [signingOut, setSigningOut] = useState(false);
 
 	// Sync search input with URL query param so it stays populated
 	const urlQuery = searchParams.get("q") || "";
@@ -144,6 +148,23 @@ export default function Header() {
 						aria-label="Settings"
 					/>
 				</Tooltip>
+				<Button
+					variant="ghost"
+					size="sm"
+					loading={signingOut}
+					onClick={async () => {
+						setSigningOut(true);
+						try {
+							await api.logout();
+							queryClient.clear();
+							navigate("/login", { replace: true });
+						} finally {
+							setSigningOut(false);
+						}
+					}}
+				>
+					Sign out
+				</Button>
 			</div>
 		</header>
 	);

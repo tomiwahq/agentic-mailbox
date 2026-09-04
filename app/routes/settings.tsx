@@ -7,6 +7,7 @@ import { RobotIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
+import api from "~/services/api";
 
 // Placeholder shown in the textarea when no custom prompt is set.
 // The authoritative default prompt lives in workers/agent/index.ts (DEFAULT_SYSTEM_PROMPT).
@@ -26,6 +27,7 @@ export default function SettingsRoute() {
 	const [autoDraft, setAutoDraft] = useState(true);
 	const [loadRemoteImages, setLoadRemoteImages] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
+	const [enrollingPasskey, setEnrollingPasskey] = useState(false);
 
 	useEffect(() => {
 		if (mailbox) {
@@ -121,6 +123,29 @@ export default function SettingsRoute() {
 							<input type="checkbox" checked={loadRemoteImages} onChange={(e) => setLoadRemoteImages(e.target.checked)} />
 							Load remote images by default (proxied)
 						</label>
+						<div className="pt-2">
+							<Button
+								variant="secondary"
+								size="sm"
+								loading={enrollingPasskey}
+								onClick={async () => {
+									setEnrollingPasskey(true);
+									try {
+										const options = await api.startPasskeyRegistration();
+										const { startRegistration } = await import("@simplewebauthn/browser");
+										const response = await startRegistration({ optionsJSON: options as any });
+										await api.verifyPasskeyRegistration(response);
+										toastManager.add({ title: "Passkey added" });
+									} catch {
+										toastManager.add({ title: "Failed to add passkey", variant: "error" });
+									} finally {
+										setEnrollingPasskey(false);
+									}
+								}}
+							>
+								Add passkey
+							</Button>
+						</div>
 					</div>
 				</div>
 

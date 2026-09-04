@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+	configuredDomains,
 	ensureAuthSchema,
 	finishAuthentication,
 	finishRegistration,
@@ -17,7 +18,7 @@ import {
 } from "../lib/auth";
 import type { Env } from "../types";
 import { checkAuthRateLimit, clientIp } from "../lib/rate-limit";
-import { DEFAULT_MAILBOX_SETTINGS, syncAliasPointers } from "../lib/mailbox-settings";
+import { DEFAULT_MAILBOX_SETTINGS, ensureUserMailbox, syncAliasPointers } from "../lib/mailbox-settings";
 
 function parseBody<T>(schema: z.ZodType<T>, data: unknown): { ok: true; data: T } | { ok: false; error: string } {
 	const parsed = schema.safeParse(data);
@@ -74,6 +75,7 @@ app.post("/api/v1/auth/login/password", async (c) => {
 	const ok = await verifyPassword(body.password, c.env.AUTH_PEPPER, row.password_hash);
 	if (!ok) return c.json({ error: "Invalid credentials" }, 401);
 	await loginUser(c, row.id, row.email, row.domain);
+	await ensureUserMailbox(c.env, row.email, localPart);
 	return c.json({ ok: true, email: row.email });
 });
 
@@ -144,6 +146,7 @@ app.post("/api/v1/auth/passkey/login/verify", async (c) => {
 	const user = await c.env.AUTH_DB.prepare("SELECT id, email, domain FROM user_accounts WHERE id = ? AND is_active = 1").bind(body.accountId).first<any>();
 	if (!user) return c.json({ error: "User not found" }, 404);
 	await loginUser(c, user.id, user.email, user.domain);
+	await ensureUserMailbox(c.env, user.email);
 	return c.json({ ok: true, email: user.email });
 });
 
@@ -176,6 +179,9 @@ app.post("/api/v1/admin/users", async (c) => {
 	if (!parsed.ok) return c.json({ error: parsed.error }, 400);
 	const localPart = parsed.data.localPart.toLowerCase();
 	const domain = parsed.data.domain.toLowerCase();
+	if (!configuredDomains(c.env).includes(domain)) {
+		return c.json({ error: "Domain is not configured" }, 400);
+	}
 	const email = `${localPart}@${domain}`;
 	const existing = await c.env.AUTH_DB.prepare("SELECT id FROM user_accounts WHERE email = ?").bind(email).first();
 	if (existing) return c.json({ error: "User already exists" }, 409);

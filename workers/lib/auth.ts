@@ -26,6 +26,11 @@ const CHALLENGE_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
 let schemaReady = false;
+let domainsSynced = false;
+
+export function configuredDomains(env: Env): string[] {
+	return (env.DOMAINS || "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
+}
 
 function nowIso() {
 	return new Date().toISOString();
@@ -125,12 +130,19 @@ export async function ensureAuthSchema(env: Env) {
 }
 
 export async function syncDomainsFromEnv(env: Env) {
-	const domains = (env.DOMAINS || "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
-	for (const domain of domains) {
-		await env.AUTH_DB.prepare(
-			"INSERT OR IGNORE INTO domains (domain, host, is_active, created_at) VALUES (?, ?, 1, ?)",
-		).bind(domain, domain, nowIso()).run();
+	if (domainsSynced) return;
+	const domains = configuredDomains(env);
+	if (domains.length > 0) {
+		const createdAt = nowIso();
+		await env.AUTH_DB.batch(
+			domains.map((domain) =>
+				env.AUTH_DB.prepare(
+					"INSERT OR IGNORE INTO domains (domain, host, is_active, created_at) VALUES (?, ?, 1, ?)",
+				).bind(domain, domain, createdAt),
+			),
+		);
 	}
+	domainsSynced = true;
 }
 
 export function resolveTenant(hostHeader: string | undefined, env: Env) {
@@ -138,7 +150,7 @@ export function resolveTenant(hostHeader: string | undefined, env: Env) {
 	const adminHost = normalizeHost(env.ADMIN_HOST || "");
 	if (!host) return { kind: "unknown" as const };
 	if (adminHost && host === adminHost) return { kind: "admin" as const, host };
-	const domains = (env.DOMAINS || "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
+	const domains = configuredDomains(env);
 	for (const domain of domains) {
 		if (host === domain || host.endsWith(`.${domain}`)) {
 			return { kind: "domain" as const, domain, host };
@@ -252,7 +264,7 @@ export function resolvePasskeyRpId(env: Env, hostHeader: string | undefined): st
 	if (tenant.kind === "domain" && tenant.domain) return tenant.domain;
 	if (tenant.kind === "admin") {
 		const adminHost = normalizeHost(env.ADMIN_HOST);
-		const domains = (env.DOMAINS || "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
+		const domains = configuredDomains(env);
 		for (const domain of domains) {
 			if (adminHost === domain || adminHost.endsWith(`.${domain}`)) return domain;
 		}

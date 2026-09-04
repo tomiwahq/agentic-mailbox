@@ -97,7 +97,7 @@ interface EmailListResponse {
 const api = {
 	// Config
 	getConfig: () =>
-		get<{ domains: string[]; emailAddresses: string[] }>("/api/v1/config"),
+		get<{ domains: string[]; tenantDomain: string | null }>("/api/v1/config"),
 	getSession: () => get<SessionState>("/api/v1/auth/session"),
 	logout: () => post<{ ok: boolean }>("/api/v1/auth/logout"),
 	loginUserPassword: (localPart: string, password: string) =>

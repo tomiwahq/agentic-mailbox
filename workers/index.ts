@@ -19,12 +19,13 @@ import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
-import { getAuthPrincipal, mailboxDomain, resolveTenant } from "./lib/auth";
+import { canAccessMailbox, configuredDomains, getAuthPrincipal, mailboxDomain, resolveTenant } from "./lib/auth";
 import { collectRecipientAddresses, isSafeImageUrl, parseEmailDate } from "./lib/address";
 import { createQueuedEmail, sendAndTrack } from "./lib/delivery";
 import { resolveInboundMailboxIds } from "./lib/inbound";
 import {
 	DEFAULT_MAILBOX_SETTINGS,
+	ensureUserMailbox,
 	getMailboxSettings,
 	mailboxAliases,
 	syncAliasPointers,
@@ -94,7 +95,11 @@ app.use("/api/*", cors({
 }));
 app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
 app.use("/api/v1/*", async (c, next) => {
-	if (c.req.path.startsWith("/api/v1/auth/") || c.req.path.startsWith("/api/v1/admin/")) {
+	if (
+		c.req.path === "/api/v1/config" ||
+		c.req.path.startsWith("/api/v1/auth/") ||
+		c.req.path.startsWith("/api/v1/admin/")
+	) {
 		return next();
 	}
 	const principal = await getAuthPrincipal(c as any);
@@ -104,38 +109,50 @@ app.use("/api/v1/*", async (c, next) => {
 
 // -- Config ---------------------------------------------------------
 
-app.get("/api/v1/config", (c) => {
-	const domainsRaw = c.env.DOMAINS || "";
-	const domains = domainsRaw.split(",").map((d) => d.trim()).filter(Boolean);
-	const emailAddresses = c.env.EMAIL_ADDRESSES ?? [];
-	return c.json({ domains, emailAddresses });
+app.get("/api/v1/config", async (c) => {
+	const tenant = resolveTenant(c.req.header("host"), c.env);
+	const principal = await getAuthPrincipal(c as any);
+	if (tenant.kind === "domain") {
+		return c.json({ domains: [tenant.domain], tenantDomain: tenant.domain });
+	}
+	if (tenant.kind === "admin" && principal?.realm === "admin") {
+		return c.json({ domains: configuredDomains(c.env), tenantDomain: null });
+	}
+	return c.json({ domains: [] as string[], tenantDomain: null });
 });
 
 // -- Mailboxes ------------------------------------------------------
 
 app.get("/api/v1/mailboxes", async (c) => {
-	const allMailboxes = await listMailboxes(c.env.BUCKET);
 	const principal = await getAuthPrincipal(c as any);
 	if (!principal) return c.json({ error: "Unauthorized" }, 401);
-	const visible = principal.realm === "admin" ? allMailboxes : allMailboxes.filter((m) => m.id.toLowerCase() === principal.email.toLowerCase());
+	const tenant = resolveTenant(c.req.header("host"), c.env);
+	if (principal.realm === "user") {
+		const email = await ensureUserMailbox(c.env, principal.email);
+		return c.json([{ id: email, email, name: email }]);
+	}
+	const allMailboxes = await listMailboxes(c.env.BUCKET);
+	const visible = tenant.kind === "domain"
+		? allMailboxes.filter((m) => mailboxDomain(m.id) === tenant.domain)
+		: allMailboxes;
 	return c.json(visible.map((m) => ({ ...m, name: m.id })));
 });
 
 app.post("/api/v1/mailboxes", async (c) => {
 	const principal = await getAuthPrincipal(c as any);
 	if (!principal) return c.json({ error: "Unauthorized" }, 401);
+	if (principal.realm !== "admin") {
+		return c.json({ error: "Only admins can create mailboxes" }, 403);
+	}
 	const tenant = resolveTenant(c.req.header("host"), c.env);
-	if (principal.realm !== "admin" && tenant.kind !== "domain") return c.json({ error: "Forbidden" }, 403);
 	const { name, settings, email: rawEmail } = CreateMailboxBody.parse(await c.req.json());
 	const email = rawEmail.toLowerCase();
-	if (principal.realm !== "admin") {
-		if (email !== principal.email || mailboxDomain(email) !== tenant.domain) {
-			return c.json({ error: "You can only create your own mailbox in this domain" }, 403);
-		}
+	const domain = mailboxDomain(email);
+	if (!configuredDomains(c.env).includes(domain)) {
+		return c.json({ error: "Domain is not configured" }, 400);
 	}
-	const allowedAddresses = (c.env.EMAIL_ADDRESSES ?? []) as string[];
-	if (allowedAddresses.length > 0 && !allowedAddresses.map((a) => a.toLowerCase()).includes(email)) {
-		return c.json({ error: "Mailbox creation is restricted to configured EMAIL_ADDRESSES" }, 403);
+	if (tenant.kind === "domain" && domain !== tenant.domain) {
+		return c.json({ error: "You can only create mailboxes for this domain" }, 403);
 	}
 	const key = `mailboxes/${email}.json`;
 	if (await c.env.BUCKET.head(key)) return c.json({ error: "Mailbox already exists" }, 409);
@@ -149,14 +166,26 @@ app.post("/api/v1/mailboxes", async (c) => {
 });
 
 app.get("/api/v1/mailboxes/:mailboxId", async (c) => {
-	const mailboxId = c.req.param("mailboxId")!;
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
+	if (!(await canAccessMailbox(c as any, mailboxId))) return c.json({ error: "Forbidden" }, 403);
 	const obj = await c.env.BUCKET.get(`mailboxes/${mailboxId}.json`);
-	if (!obj) return c.json({ error: "Not found" }, 404);
+	if (!obj) {
+		const principal = await getAuthPrincipal(c as any);
+		if (principal?.realm === "user" && principal.email.toLowerCase() === mailboxId.toLowerCase()) {
+			await ensureUserMailbox(c.env, mailboxId);
+			const created = await c.env.BUCKET.get(`mailboxes/${mailboxId}.json`);
+			if (created) {
+				return c.json({ id: mailboxId, name: mailboxId, email: mailboxId, settings: await created.json() });
+			}
+		}
+		return c.json({ error: "Not found" }, 404);
+	}
 	return c.json({ id: mailboxId, name: mailboxId, email: mailboxId, settings: await obj.json() });
 });
 
 app.put("/api/v1/mailboxes/:mailboxId", async (c) => {
-	const mailboxId = c.req.param("mailboxId")!;
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
+	if (!(await canAccessMailbox(c as any, mailboxId))) return c.json({ error: "Forbidden" }, 403);
 	const { settings } = (await c.req.json()) as { settings: Record<string, unknown> };
 	const key = `mailboxes/${mailboxId}.json`;
 	const existing = await getMailboxSettings(c.env.BUCKET, mailboxId);
@@ -167,7 +196,8 @@ app.put("/api/v1/mailboxes/:mailboxId", async (c) => {
 });
 
 app.delete("/api/v1/mailboxes/:mailboxId", async (c) => {
-	const mailboxId = c.req.param("mailboxId")!;
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
+	if (!(await canAccessMailbox(c as any, mailboxId))) return c.json({ error: "Forbidden" }, 403);
 	const key = `mailboxes/${mailboxId}.json`;
 	const settings = await getMailboxSettings(c.env.BUCKET, mailboxId);
 	if (settings === null) return c.json({ error: "Not found" }, 404);

@@ -46,10 +46,13 @@ function isAdminPassthroughPath(path: string) {
 }
 
 app.use("*", async (c, next) => {
+	const path = new URL(c.req.url).pathname;
+	if (path.startsWith("/assets/") || /\.[a-z0-9]+$/i.test(path)) {
+		return next();
+	}
 	await ensureAuthSchema(c.env);
 	await syncDomainsFromEnv(c.env);
 	const tenant = resolveTenant(c.req.header("host"), c.env);
-	const path = new URL(c.req.url).pathname;
 	if (tenant.kind === "admin" && !isAdminPassthroughPath(path)) {
 		return c.redirect("/admin", 302);
 	}

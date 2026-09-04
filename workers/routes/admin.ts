@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { ensureAuthSchema, hashPassword, requireAdmin } from "../lib/auth";
+import { configuredDomains, ensureAuthSchema, hashPassword, requireAdmin } from "../lib/auth";
 import { listMailboxes } from "../lib/email-helpers";
 import type { Env } from "../types";
 
@@ -35,8 +35,12 @@ app.get("/api/v1/admin/domains", async (c) => {
 
 app.post("/api/v1/admin/domains", async (c) => {
 	const body = z.object({ domain: z.string().min(1), host: z.string().min(1) }).parse(await c.req.json());
+	const domain = body.domain.toLowerCase();
+	if (!configuredDomains(c.env).includes(domain)) {
+		return c.json({ error: "Domain must be listed in the Worker DOMAINS binding" }, 400);
+	}
 	await c.env.AUTH_DB.prepare("INSERT INTO domains (domain, host, is_active, created_at) VALUES (?, ?, 1, ?)")
-		.bind(body.domain.toLowerCase(), body.host.toLowerCase(), new Date().toISOString())
+		.bind(domain, body.host.toLowerCase(), new Date().toISOString())
 		.run();
 	return c.json({ ok: true }, 201);
 });

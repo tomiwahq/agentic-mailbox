@@ -3,18 +3,25 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useEffect, useRef } from "react";
-import { Outlet, useParams } from "react-router";
+import { Outlet, useNavigate, useParams } from "react-router";
 import AgentSidebar from "~/components/AgentSidebar";
 import ComposeEmail from "~/components/ComposeEmail";
 import Header from "~/components/Header";
 import Sidebar from "~/components/Sidebar";
+import { mailboxInboxPath } from "~/lib/tenant";
+import { useEmails } from "~/queries/emails";
+import { useFolders } from "~/queries/folders";
 import { useMailbox } from "~/queries/mailboxes";
+import { useSession } from "~/queries/session";
 import { useUIStore } from "~/hooks/useUIStore";
 
 export default function MailboxRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
-	// Prefetch mailbox data for child components
+	const navigate = useNavigate();
+	const { data: session, isLoading: sessionLoading } = useSession();
 	useMailbox(mailboxId);
+	useFolders(mailboxId);
+	useEmails(mailboxId, { folder: "inbox", page: "1", limit: "25" });
 	const prevMailboxIdRef = useRef<string | undefined>(undefined);
 	const {
 		isSidebarOpen,
@@ -23,6 +30,21 @@ export default function MailboxRoute() {
 		closePanel,
 		closeComposeModal,
 	} = useUIStore();
+
+	useEffect(() => {
+		if (sessionLoading || !session) return;
+		if (!session.authenticated) {
+			navigate("/login", { replace: true });
+			return;
+		}
+		if (
+			session.principal?.realm === "user" &&
+			mailboxId &&
+			session.principal.email.toLowerCase() !== mailboxId.toLowerCase()
+		) {
+			navigate(mailboxInboxPath(session.principal.email), { replace: true });
+		}
+	}, [session, sessionLoading, mailboxId, navigate]);
 
 	useEffect(() => {
 		if (

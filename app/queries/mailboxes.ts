@@ -7,10 +7,11 @@ import api from "~/services/api";
 import type { Mailbox } from "~/types";
 import { queryKeys } from "./keys";
 
-export function useMailboxes() {
+export function useMailboxes(options?: { enabled?: boolean }) {
 	return useQuery<Mailbox[]>({
-		queryKey: queryKeys.mailboxes.all,
+		queryKey: queryKeys.mailboxes.all(),
 		queryFn: () => api.listMailboxes() as Promise<Mailbox[]>,
+		enabled: options?.enabled ?? true,
 	});
 }
 
@@ -30,7 +31,7 @@ export function useCreateMailbox() {
 		mutationFn: ({ email, name }: { email: string; name: string }) =>
 			api.createMailbox(email, name),
 		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.all });
+			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.all() });
 		},
 	});
 }
@@ -45,7 +46,7 @@ export function useUpdateMailbox() {
 			api.updateMailbox(mailboxId, settings),
 		onSuccess: (_data, { mailboxId }) => {
 			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.detail(mailboxId) });
-			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.all });
+			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.all() });
 		},
 	});
 }
@@ -55,7 +56,7 @@ export function useDeleteMailbox() {
 	return useMutation({
 		mutationFn: (mailboxId: string) => api.deleteMailbox(mailboxId),
 		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.all });
+			qc.invalidateQueries({ queryKey: queryKeys.mailboxes.all() });
 		},
 	});
 }

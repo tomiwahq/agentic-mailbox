@@ -56,6 +56,24 @@ export async function syncAliasPointers(
 	}
 }
 
+export async function ensureUserMailbox(
+	env: { BUCKET: R2Bucket; MAILBOX: DurableObjectNamespace },
+	email: string,
+	fromName?: string,
+): Promise<string> {
+	const mailboxId = email.trim().toLowerCase();
+	const key = `mailboxes/${mailboxId}.json`;
+	if (!(await env.BUCKET.head(key))) {
+		const settings = {
+			...DEFAULT_MAILBOX_SETTINGS,
+			fromName: fromName || mailboxId.split("@")[0] || mailboxId,
+		};
+		await env.BUCKET.put(key, JSON.stringify(settings));
+		await (env.MAILBOX.get(env.MAILBOX.idFromName(mailboxId)) as any).getFolders();
+	}
+	return mailboxId;
+}
+
 export async function resolveMailboxForAddress(
 	bucket: R2Bucket,
 	address: string,

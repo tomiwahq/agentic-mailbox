@@ -2,11 +2,17 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+function queryHost() {
+	return typeof window !== "undefined" ? window.location.host : "ssr";
+}
+
 /** Centralised query key factories for cache invalidation. */
 export const queryKeys = {
+	session: () => ["session", queryHost()] as const,
+	config: () => ["config", queryHost()] as const,
 	mailboxes: {
-		all: ["mailboxes"] as const,
-		detail: (id: string) => ["mailboxes", id] as const,
+		all: () => ["mailboxes", queryHost()] as const,
+		detail: (id: string) => ["mailboxes", queryHost(), id] as const,
 	},
 	emails: {
 		list: (mailboxId: string, params: Record<string, string>) =>
@@ -23,5 +29,4 @@ export const queryKeys = {
 		results: (mailboxId: string, query: string, page: number) =>
 			["search", mailboxId, query, page] as const,
 	},
-	config: ["config"] as const,
 };
