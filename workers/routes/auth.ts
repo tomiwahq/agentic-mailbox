@@ -17,6 +17,14 @@ import {
 } from "../lib/auth";
 import type { Env } from "../types";
 import { checkAuthRateLimit, clientIp } from "../lib/rate-limit";
+import { DEFAULT_MAILBOX_SETTINGS, syncAliasPointers } from "../lib/mailbox-settings";
+
+function parseBody<T>(schema: z.ZodType<T>, data: unknown): { ok: true; data: T } | { ok: false; error: string } {
+	const parsed = schema.safeParse(data);
+	if (parsed.success) return { ok: true, data: parsed.data };
+	const message = parsed.error.issues.map((issue) => issue.message).join("; ") || "Invalid request";
+	return { ok: false, error: message };
+}
 
 const UserPasswordLoginBody = z.object({
 	localPart: z.string().min(1),
@@ -160,18 +168,28 @@ app.post("/api/v1/admin/users", async (c) => {
 	await ensureAuthSchema(c.env);
 	const admin = await requireAdmin(c);
 	if (!admin) return c.json({ error: "Unauthorized" }, 401);
-	const body = z.object({
-		localPart: z.string().min(1),
-		domain: z.string().min(1),
-		password: z.string().min(12),
-	}).parse(await c.req.json());
-	const localPart = body.localPart.trim().toLowerCase();
-	const domain = body.domain.trim().toLowerCase();
+	const parsed = parseBody(z.object({
+		localPart: z.string().trim().min(1, "Local part is required"),
+		domain: z.string().trim().min(1, "Domain is required"),
+		password: z.string().min(8, "Password must be at least 8 characters"),
+	}), await c.req.json());
+	if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+	const localPart = parsed.data.localPart.toLowerCase();
+	const domain = parsed.data.domain.toLowerCase();
 	const email = `${localPart}@${domain}`;
-	const hash = await hashPassword(body.password, c.env.AUTH_PEPPER);
+	const existing = await c.env.AUTH_DB.prepare("SELECT id FROM user_accounts WHERE email = ?").bind(email).first();
+	if (existing) return c.json({ error: "User already exists" }, 409);
+	const hash = await hashPassword(parsed.data.password, c.env.AUTH_PEPPER);
 	await c.env.AUTH_DB.prepare(
 		"INSERT INTO user_accounts (id, email, local_part, domain, password_hash, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
 	).bind(crypto.randomUUID(), email, localPart, domain, hash, new Date().toISOString(), new Date().toISOString()).run();
+	const mailboxKey = `mailboxes/${email}.json`;
+	if (!(await c.env.BUCKET.head(mailboxKey))) {
+		const settings = { ...DEFAULT_MAILBOX_SETTINGS, fromName: localPart };
+		await c.env.BUCKET.put(mailboxKey, JSON.stringify(settings));
+		await syncAliasPointers(c.env.BUCKET, email, [], []);
+		await c.env.MAILBOX.get(c.env.MAILBOX.idFromName(email)).getFolders();
+	}
 	return c.json({ ok: true, email }, 201);
 });
 

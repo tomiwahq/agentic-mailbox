@@ -19,7 +19,7 @@ export default function AdminMailboxesRoute() {
 				<div className="grid md:grid-cols-4 gap-2">
 					<Input label="Local part" value={localPart} onChange={(e) => setLocalPart(e.target.value)} />
 					<Input label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)} />
-					<Input type="password" label="Temporary password" value={password} onChange={(e) => setPassword(e.target.value)} />
+					<Input type="password" label="Password (min 8 characters)" value={password} onChange={(e) => setPassword(e.target.value)} />
 					<Button onClick={async () => {
 						setError(null);
 						try {
