@@ -7,6 +7,7 @@ import {
 	ArchiveIcon,
 	CaretLeftIcon,
 	CaretUpDownIcon,
+	EnvelopeSimpleIcon,
 	FileIcon,
 	FolderIcon,
 	PaperPlaneTiltIcon,
@@ -162,8 +163,19 @@ export default function Sidebar() {
 							className="w-full px-2.5 py-2 rounded-lg border border-kumo-line bg-kumo-base hover:bg-kumo-tint transition-colors flex items-center justify-between text-left cursor-pointer shadow-xs"
 						>
 							<div className="min-w-0 flex-1 mr-2">
-								<div className="text-sm font-semibold text-kumo-default truncate">
-									{displayName}
+								<div className="flex items-center gap-1.5 min-w-0">
+									<span className="text-sm font-semibold text-kumo-default truncate">
+										{displayName}
+									</span>
+									{getUnreadCount(Folders.INBOX) > 0 && (
+										<Badge
+											variant="primary"
+											className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+										>
+											<EnvelopeSimpleIcon size={11} weight="fill" />
+											<span>{getUnreadCount(Folders.INBOX)}</span>
+										</Badge>
+									)}
 								</div>
 								<div className="text-xs text-kumo-subtle truncate mt-0.5">
 									{currentMailbox?.email || currentMailbox?.id || mailboxId}
@@ -203,7 +215,18 @@ export default function Sidebar() {
 														: "text-kumo-default hover:bg-kumo-tint"
 												}`}
 											>
-												<span className="truncate">{email}</span>
+												<div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2">
+													<span className="truncate">{email}</span>
+													{m.unreadCount != null && m.unreadCount > 0 && (
+														<Badge
+															variant="primary"
+															className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+														>
+															<EnvelopeSimpleIcon size={11} weight="fill" />
+															<span>{m.unreadCount}</span>
+														</Badge>
+													)}
+												</div>
 												{isCurrent && (
 													<span className="text-[10px] text-kumo-subtle ml-1 shrink-0 font-medium">
 														Current

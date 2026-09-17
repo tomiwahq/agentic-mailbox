@@ -1,5 +1,5 @@
 import { Badge, Button, Input, Loader } from "@cloudflare/kumo";
-import { ArrowSquareOutIcon, PlusIcon, TrayIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, EnvelopeSimpleIcon, PlusIcon, TrayIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -29,14 +29,20 @@ export default function AdminInboxesRoute() {
 
 	// Merge mailboxes and users to ensure complete list
 	const allMailboxes = useMemo(() => {
-		const map = new Map<string, { id: string; email: string; name?: string; isActive?: boolean }>();
+		const map = new Map<string, { id: string; email: string; name?: string; isActive?: boolean; unreadCount?: number }>();
 
 		const mailboxItems = Array.isArray(mailboxesQuery.data) ? mailboxesQuery.data : [];
 		for (const m of mailboxItems) {
 			const raw = m?.email || m?.id;
 			if (!raw) continue;
 			const email = String(raw).toLowerCase();
-			map.set(email, { id: email, email, name: m.name || email, isActive: true });
+			map.set(email, {
+				id: email,
+				email,
+				name: m.name || email,
+				isActive: true,
+				unreadCount: m.unreadCount || 0,
+			});
 		}
 
 		const userItems = Array.isArray(usersQuery.data) ? usersQuery.data : [];
@@ -47,7 +53,13 @@ export default function AdminInboxesRoute() {
 			if (existing) {
 				existing.isActive = u.is_active;
 			} else {
-				map.set(email, { id: email, email, name: u.local_part || email, isActive: u.is_active });
+				map.set(email, {
+					id: email,
+					email,
+					name: u.local_part || email,
+					isActive: u.is_active,
+					unreadCount: 0,
+				});
 			}
 		}
 
@@ -154,16 +166,38 @@ export default function AdminInboxesRoute() {
 										{(mailbox.name || mailbox.email).charAt(0).toUpperCase()}
 									</div>
 									<div className="min-w-0 flex-1">
-										<div className="text-base font-medium text-kumo-default truncate">
-											{mailbox.name && mailbox.name !== mailbox.email
-												? mailbox.name
-												: mailbox.email.split("@")[0]}
+										<div className="flex items-start justify-between gap-2">
+											<div className="text-base font-medium text-kumo-default truncate">
+												{mailbox.name && mailbox.name !== mailbox.email
+													? mailbox.name
+													: mailbox.email.split("@")[0]}
+											</div>
+											{mailbox.unreadCount != null && mailbox.unreadCount > 0 ? (
+												<Badge
+													variant="primary"
+													className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold"
+												>
+													<EnvelopeSimpleIcon size={12} weight="fill" />
+													<span>{mailbox.unreadCount}</span>
+												</Badge>
+											) : (
+												<span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] text-kumo-subtle">
+													<EnvelopeSimpleIcon size={12} />
+													<span>0</span>
+												</span>
+											)}
 										</div>
 										<div className="text-sm text-kumo-subtle truncate">{mailbox.email}</div>
-										<div className="mt-2 flex items-center gap-2">
+										<div className="mt-2 flex items-center gap-2 flex-wrap">
 											<span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-kumo-recessed text-kumo-subtle border border-kumo-line">
 												@{domainPart}
 											</span>
+											{mailbox.unreadCount != null && mailbox.unreadCount > 0 && (
+												<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-kumo-fill text-kumo-default border border-kumo-line">
+													<EnvelopeSimpleIcon size={12} weight="fill" className="text-kumo-brand" />
+													<span>{mailbox.unreadCount} unread</span>
+												</span>
+											)}
 											{mailbox.isActive === false && (
 												<Badge variant="secondary">Locked</Badge>
 											)}

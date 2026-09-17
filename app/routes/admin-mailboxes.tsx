@@ -1,5 +1,5 @@
-import { Button, Input, Select, Text } from "@cloudflare/kumo";
-import { ArrowSquareOutIcon } from "@phosphor-icons/react";
+import { Badge, Button, Input, Select, Text } from "@cloudflare/kumo";
+import { ArrowSquareOutIcon, EnvelopeSimpleIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { mailboxInboxPath } from "~/lib/tenant";
@@ -127,7 +127,18 @@ export default function AdminMailboxesRoute() {
 				) : (
 					(mailboxes.data || []).map((m) => (
 						<div key={m.id} className="flex items-center justify-between gap-4 py-2.5 border-b border-kumo-line last:border-0">
-							<div className="text-sm font-medium truncate text-kumo-default">{m.id}</div>
+							<div className="flex items-center gap-2 min-w-0">
+								<span className="text-sm font-medium truncate text-kumo-default">{m.id}</span>
+								{m.unreadCount != null && m.unreadCount > 0 && (
+									<Badge
+										variant="primary"
+										className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+									>
+										<EnvelopeSimpleIcon size={11} weight="fill" />
+										<span>{m.unreadCount}</span>
+									</Badge>
+								)}
+							</div>
 							<Button
 								size="sm"
 								variant="secondary"

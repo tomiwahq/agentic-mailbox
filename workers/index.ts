@@ -131,19 +131,24 @@ app.get("/api/v1/mailboxes", async (c: AppContext) => {
 	const tenant = resolveTenant(c.req.header("host"), c.env);
 	if (principal.realm === "user") {
 		const email = await ensureUserMailbox(c.env, principal.email);
-		return c.json([{ id: email, email, name: email }]);
+		let unreadCount = 0;
+		try {
+			const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(email)) as any;
+			unreadCount = await stub.getUnreadCount();
+		} catch {}
+		return c.json([{ id: email, email, name: email, unreadCount }]);
 	}
 	const allMailboxes = await listMailboxes(c.env.BUCKET);
-	const mailboxMap = new Map<string, { id: string; email: string; name: string }>();
+	const mailboxMap = new Map<string, { id: string; email: string; name: string; unreadCount: number }>();
 	for (const m of allMailboxes) {
-		mailboxMap.set(m.id.toLowerCase(), { ...m, name: m.id });
+		mailboxMap.set(m.id.toLowerCase(), { ...m, name: m.id, unreadCount: 0 });
 	}
 	try {
 		const rows = await c.env.AUTH_DB.prepare("SELECT email FROM user_accounts WHERE is_active = 1").all<{ email: string }>();
 		for (const r of rows.results || []) {
 			const email = r.email.toLowerCase();
 			if (!mailboxMap.has(email)) {
-				mailboxMap.set(email, { id: email, email, name: email });
+				mailboxMap.set(email, { id: email, email, name: email, unreadCount: 0 });
 			}
 		}
 	} catch {
@@ -153,6 +158,16 @@ app.get("/api/v1/mailboxes", async (c: AppContext) => {
 	const visible = tenant.kind === "domain"
 		? merged.filter((m) => mailboxDomain(m.id) === tenant.domain)
 		: merged;
+	await Promise.all(
+		visible.map(async (m) => {
+			try {
+				const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(m.id)) as any;
+				m.unreadCount = await stub.getUnreadCount();
+			} catch {
+				m.unreadCount = 0;
+			}
+		}),
+	);
 	return c.json(visible);
 });
 

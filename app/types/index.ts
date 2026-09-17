@@ -24,6 +24,7 @@ export interface Mailbox {
 	email: string;
 	name: string;
 	settings?: MailboxSettings;
+	unreadCount?: number;
 }
 
 export interface Email {

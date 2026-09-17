@@ -1,5 +1,5 @@
-import { Button, Loader } from "@cloudflare/kumo";
-import { ArrowSquareOutIcon, TrayIcon } from "@phosphor-icons/react";
+import { Badge, Button, Loader } from "@cloudflare/kumo";
+import { ArrowSquareOutIcon, EnvelopeSimpleIcon, TrayIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { mailboxInboxPath } from "~/lib/tenant";
@@ -84,7 +84,18 @@ export default function AdminOverviewRoute() {
 									className="flex items-center justify-between gap-3 p-3 rounded-lg border border-kumo-line bg-kumo-recessed/40 hover:bg-kumo-tint/50 transition-colors"
 								>
 									<div className="min-w-0 flex-1">
-										<div className="text-sm font-medium text-kumo-default truncate">{id}</div>
+										<div className="flex items-center gap-1.5 min-w-0">
+											<span className="text-sm font-medium text-kumo-default truncate">{id}</span>
+											{m.unreadCount != null && m.unreadCount > 0 && (
+												<Badge
+													variant="primary"
+													className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+												>
+													<EnvelopeSimpleIcon size={11} weight="fill" />
+													<span>{m.unreadCount}</span>
+												</Badge>
+											)}
+										</div>
 										{domainPart && <div className="text-xs text-kumo-subtle truncate">@{domainPart}</div>}
 									</div>
 									<Button
