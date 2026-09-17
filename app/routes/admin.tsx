@@ -1,4 +1,5 @@
 import { Button } from "@cloudflare/kumo";
+import { TrayIcon } from "@phosphor-icons/react";
 import { Outlet, NavLink, useNavigate } from "react-router";
 import api from "~/services/api";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,8 +8,9 @@ import { useSession } from "~/queries/session";
 
 const NAV = [
 	{ to: "/admin", label: "Overview", end: true },
+	{ to: "/admin/inboxes", label: "Inboxes" },
+	{ to: "/admin/mailboxes", label: "Mailboxes & Users" },
 	{ to: "/admin/domains", label: "Domains" },
-	{ to: "/admin/mailboxes", label: "Mailboxes" },
 ];
 
 export default function AdminLayoutRoute() {
@@ -44,11 +46,20 @@ export default function AdminLayoutRoute() {
 							))}
 						</nav>
 					</div>
-					<Button variant="secondary" onClick={async () => {
-						await api.logout();
-						queryClient.clear();
-						navigate("/admin/login", { replace: true });
-					}}>Logout</Button>
+					<div className="flex items-center gap-2">
+						<Button
+							variant="primary"
+							icon={<TrayIcon size={16} />}
+							onClick={() => navigate("/admin/inboxes")}
+						>
+							Open Inboxes
+						</Button>
+						<Button variant="secondary" onClick={async () => {
+							await api.logout();
+							queryClient.clear();
+							navigate("/admin/login", { replace: true });
+						}}>Logout</Button>
+					</div>
 				</div>
 				<Outlet />
 			</div>

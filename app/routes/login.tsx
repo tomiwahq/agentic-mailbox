@@ -73,9 +73,9 @@ export default function LoginRoute() {
 			<div className="w-full max-w-md rounded-xl border border-kumo-line bg-kumo-base p-6 space-y-5">
 				<div>
 					<h1 className="text-xl font-semibold text-kumo-default">Sign in</h1>
-					<Text size="sm" className="mt-1">
+					<p className="text-sm text-kumo-subtle mt-1">
 						Use your mailbox on this domain.
-					</Text>
+					</p>
 				</div>
 				{error && <Text variant="error" size="sm">{error}</Text>}
 				<form

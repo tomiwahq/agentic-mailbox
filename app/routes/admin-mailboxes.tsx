@@ -1,10 +1,14 @@
 import { Button, Input, Select, Text } from "@cloudflare/kumo";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
+import { mailboxInboxPath } from "~/lib/tenant";
 import { useConfig } from "~/queries/session";
 import { useQuery } from "@tanstack/react-query";
 import api from "~/services/api";
 
 export default function AdminMailboxesRoute() {
+	const navigate = useNavigate();
 	const [localPart, setLocalPart] = useState("");
 	const [domain, setDomain] = useState("");
 	const [password, setPassword] = useState("");
@@ -92,11 +96,19 @@ export default function AdminMailboxesRoute() {
 				) : (
 					(users.data || []).map((u) => (
 						<div key={u.id} className="flex items-center justify-between gap-4 py-3 border-b border-kumo-line last:border-0">
-							<div className="min-w-0">
+							<div className="min-w-0 flex-1">
 								<div className="text-sm font-medium truncate">{u.email}</div>
 								<div className="text-xs text-kumo-subtle">{u.is_active ? "Active" : "Locked"}</div>
 							</div>
-							<div className="flex gap-2 shrink-0">
+							<div className="flex items-center gap-2 shrink-0">
+								<Button
+									size="sm"
+									variant="primary"
+									icon={<ArrowSquareOutIcon size={14} />}
+									onClick={() => navigate(mailboxInboxPath(u.email))}
+								>
+									Open Inbox
+								</Button>
 								{u.is_active ? (
 									<Button size="sm" variant="secondary" onClick={async () => { await api.lockUser(u.id); users.refetch(); }}>Lock</Button>
 								) : (
@@ -114,7 +126,17 @@ export default function AdminMailboxesRoute() {
 					<p className="text-sm text-kumo-subtle">No mailbox files yet.</p>
 				) : (
 					(mailboxes.data || []).map((m) => (
-						<div key={m.id} className="py-2 text-sm border-b border-kumo-line last:border-0">{m.id}</div>
+						<div key={m.id} className="flex items-center justify-between gap-4 py-2.5 border-b border-kumo-line last:border-0">
+							<div className="text-sm font-medium truncate text-kumo-default">{m.id}</div>
+							<Button
+								size="sm"
+								variant="secondary"
+								icon={<ArrowSquareOutIcon size={14} />}
+								onClick={() => navigate(mailboxInboxPath(m.id))}
+							>
+								Open Inbox
+							</Button>
+						</div>
 					))
 				)}
 			</div>

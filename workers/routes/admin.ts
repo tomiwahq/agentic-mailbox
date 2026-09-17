@@ -47,7 +47,22 @@ app.post("/api/v1/admin/domains", async (c) => {
 
 app.get("/api/v1/admin/mailboxes", async (c) => {
 	const all = await listMailboxes(c.env.BUCKET);
-	return c.json(all);
+	const mailboxMap = new Map<string, { id: string; email: string; name: string }>();
+	for (const m of all) {
+		mailboxMap.set(m.id.toLowerCase(), { id: m.id, email: m.email, name: m.id });
+	}
+	try {
+		const rows = await c.env.AUTH_DB.prepare("SELECT email FROM user_accounts").all<{ email: string }>();
+		for (const r of rows.results || []) {
+			const email = r.email.toLowerCase();
+			if (!mailboxMap.has(email)) {
+				mailboxMap.set(email, { id: email, email, name: email });
+			}
+		}
+	} catch {
+		// Ignore if table query fails
+	}
+	return c.json(Array.from(mailboxMap.values()));
 });
 
 app.get("/api/v1/admin/users", async (c) => {

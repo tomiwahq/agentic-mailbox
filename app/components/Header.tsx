@@ -7,6 +7,7 @@ import { GearSixIcon, ListIcon, MagnifyingGlassIcon, RobotIcon, XIcon } from "@p
 import { useQueryClient } from "@tanstack/react-query";
 import { type KeyboardEvent, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { useSession } from "~/queries/session";
 import { useUIStore } from "~/hooks/useUIStore";
 import api from "~/services/api";
 
@@ -18,6 +19,8 @@ export default function Header() {
 	const location = useLocation();
 	const [searchParams] = useSearchParams();
 	const { toggleSidebar, toggleAgentPanel, isAgentPanelOpen } = useUIStore();
+	const { data: session } = useSession();
+	const isAdmin = session?.principal?.realm === "admin";
 	const queryClient = useQueryClient();
 	const [signingOut, setSigningOut] = useState(false);
 
@@ -148,6 +151,16 @@ export default function Header() {
 						aria-label="Settings"
 					/>
 				</Tooltip>
+				{isAdmin && (
+					<Button
+						variant="ghost"
+						size="sm"
+						onClick={() => navigate("/admin")}
+						className="hidden sm:inline-flex"
+					>
+						Admin Console
+					</Button>
+				)}
 				<Button
 					variant="ghost"
 					size="sm"
@@ -157,7 +170,7 @@ export default function Header() {
 						try {
 							await api.logout();
 							queryClient.clear();
-							navigate("/login", { replace: true });
+							navigate(isAdmin ? "/admin/login" : "/login", { replace: true });
 						} finally {
 							setSigningOut(false);
 						}

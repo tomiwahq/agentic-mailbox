@@ -33,7 +33,10 @@ export const requireMailbox = createMiddleware<MailboxContext>(async (c, next) =
 	let obj = await c.env.BUCKET.head(key);
 	if (!obj) {
 		const principal = await getAuthPrincipal(c as any);
-		if (principal?.realm === "user" && principal.email.toLowerCase() === mailboxId.toLowerCase()) {
+		if (
+			principal?.realm === "admin" ||
+			(principal?.realm === "user" && principal.email.toLowerCase() === mailboxId.toLowerCase())
+		) {
 			await ensureUserMailbox(c.env, mailboxId);
 			obj = await c.env.BUCKET.head(key);
 		}

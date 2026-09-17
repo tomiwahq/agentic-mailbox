@@ -35,8 +35,10 @@ const app = new Hono<{ Bindings: Env }>();
 
 function isAdminPassthroughPath(path: string) {
 	return (
+		path === "/" ||
 		path === "/admin" ||
 		path.startsWith("/admin/") ||
+		path.startsWith("/mailbox/") ||
 		path.startsWith("/api/") ||
 		path.startsWith("/mcp") ||
 		path.startsWith("/agents/") ||

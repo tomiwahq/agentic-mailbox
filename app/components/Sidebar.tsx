@@ -6,6 +6,7 @@ import { Badge, Button, Dialog, Input, Tooltip } from "@cloudflare/kumo";
 import {
 	ArchiveIcon,
 	CaretLeftIcon,
+	CaretUpDownIcon,
 	FileIcon,
 	FolderIcon,
 	PaperPlaneTiltIcon,
@@ -18,8 +19,9 @@ import {
 import { useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router";
 import { Folders, SYSTEM_FOLDER_IDS } from "shared/folders";
+import { mailboxInboxPath } from "~/lib/tenant";
 import { useCreateFolder, useFolders } from "~/queries/folders";
-import { useMailbox } from "~/queries/mailboxes";
+import { useMailbox, useMailboxes } from "~/queries/mailboxes";
 import { useSession } from "~/queries/session";
 import { useUIStore } from "~/hooks/useUIStore";
 
@@ -86,6 +88,8 @@ export default function Sidebar() {
 	const { data: currentMailbox } = useMailbox(mailboxId);
 	const { data: session } = useSession();
 	const isAdmin = session?.principal?.realm === "admin";
+	const { data: allMailboxes = [] } = useMailboxes({ enabled: isAdmin });
+	const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
 	const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
 	const [newFolderName, setNewFolderName] = useState("");
 
@@ -131,26 +135,109 @@ export default function Sidebar() {
 			{/* Back + identity */}
 			<div className="px-4 pt-4 pb-1">
 				{isAdmin && (
-					<button
-						type="button"
-						onClick={() => {
-							navigate("/");
-							closeSidebar();
-						}}
-						className="flex items-center gap-1.5 text-kumo-subtle text-sm hover:text-kumo-default transition-colors mb-2.5 cursor-pointer bg-transparent border-0 p-0"
-					>
-						<CaretLeftIcon size={14} />
-						<span>Mailboxes</span>
-					</button>
+					<div className="flex items-center justify-between gap-2 mb-2.5">
+						<button
+							type="button"
+							onClick={() => {
+								navigate("/admin");
+								closeSidebar();
+							}}
+							className="flex items-center gap-1 text-kumo-subtle text-xs font-medium hover:text-kumo-default transition-colors cursor-pointer bg-transparent border-0 p-0"
+						>
+							<CaretLeftIcon size={12} />
+							<span>Admin Console</span>
+						</button>
+						<span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-kumo-fill text-kumo-default border border-kumo-line">
+							Super Admin
+						</span>
+					</div>
 				)}
-				<div className="px-1">
-					<div className="text-base font-semibold text-kumo-default truncate">
-						{displayName}
+
+				{isAdmin && allMailboxes.length > 1 ? (
+					<div className="relative">
+						<button
+							type="button"
+							onClick={() => setIsSwitcherOpen((prev) => !prev)}
+							className="w-full px-2.5 py-2 rounded-lg border border-kumo-line bg-kumo-base hover:bg-kumo-tint transition-colors flex items-center justify-between text-left cursor-pointer shadow-xs"
+						>
+							<div className="min-w-0 flex-1 mr-2">
+								<div className="text-sm font-semibold text-kumo-default truncate">
+									{displayName}
+								</div>
+								<div className="text-xs text-kumo-subtle truncate mt-0.5">
+									{currentMailbox?.email || mailboxId}
+								</div>
+							</div>
+							<CaretUpDownIcon size={16} className="text-kumo-subtle shrink-0" />
+						</button>
+
+						{isSwitcherOpen && (
+							<>
+								<div
+									className="fixed inset-0 z-40"
+									onClick={() => setIsSwitcherOpen(false)}
+								/>
+								<div className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-64 overflow-y-auto rounded-xl border border-kumo-line bg-kumo-base shadow-xl p-1.5 space-y-0.5">
+									<div className="px-2 py-1 text-[11px] font-semibold text-kumo-subtle uppercase tracking-wider">
+										Switch Inbox ({allMailboxes.length})
+									</div>
+									{allMailboxes.map((m) => {
+										const email = m.email || m.id;
+										const isCurrent = email.toLowerCase() === mailboxId?.toLowerCase();
+										return (
+											<button
+												key={m.id}
+												type="button"
+												onClick={() => {
+													setIsSwitcherOpen(false);
+													if (!isCurrent) {
+														navigate(mailboxInboxPath(email));
+														closeSidebar();
+													}
+												}}
+												className={`w-full text-left px-2.5 py-2 rounded-lg text-xs truncate transition-colors flex items-center justify-between cursor-pointer ${
+													isCurrent
+														? "bg-kumo-fill font-semibold text-kumo-default"
+														: "text-kumo-default hover:bg-kumo-tint"
+												}`}
+											>
+												<span className="truncate">{email}</span>
+												{isCurrent && (
+													<span className="text-[10px] text-kumo-subtle ml-1 shrink-0 font-medium">
+														Current
+													</span>
+												)}
+											</button>
+										);
+									})}
+									<div className="pt-1.5 border-t border-kumo-line mt-1">
+										<button
+											type="button"
+											onClick={() => {
+												setIsSwitcherOpen(false);
+												navigate("/admin/inboxes");
+												closeSidebar();
+											}}
+											className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium text-kumo-default hover:bg-kumo-tint transition-colors cursor-pointer flex items-center justify-between"
+										>
+											<span>All inboxes dashboard</span>
+											<span>→</span>
+										</button>
+									</div>
+								</div>
+							</>
+						)}
 					</div>
-					<div className="text-sm text-kumo-subtle truncate mt-0.5">
-						{currentMailbox?.email || mailboxId}
+				) : (
+					<div className="px-1">
+						<div className="text-base font-semibold text-kumo-default truncate">
+							{displayName}
+						</div>
+						<div className="text-sm text-kumo-subtle truncate mt-0.5">
+							{currentMailbox?.email || mailboxId}
+						</div>
 					</div>
-				</div>
+				)}
 			</div>
 
 			{/* Compose */}

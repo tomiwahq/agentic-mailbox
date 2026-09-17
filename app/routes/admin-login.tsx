@@ -54,7 +54,7 @@ export default function AdminLoginRoute() {
 			<div className="w-full max-w-md rounded-xl border border-kumo-line bg-kumo-base p-6 space-y-5">
 				<div>
 					<h1 className="text-xl font-semibold">Admin sign in</h1>
-					<Text size="sm" className="mt-1">Manage domains and mailbox users.</Text>
+					<p className="text-sm text-kumo-subtle mt-1">Manage domains and mailbox users.</p>
 				</div>
 				{error && <Text variant="error" size="sm">{error}</Text>}
 				<form

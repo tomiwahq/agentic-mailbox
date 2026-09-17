@@ -25,7 +25,7 @@ export default function HomeRoute() {
 	useEffect(() => {
 		if (sessionLoading || !session) return;
 		if (session.tenant.kind === "admin") {
-			navigate(session.authenticated ? "/admin" : "/admin/login", { replace: true });
+			navigate(session.authenticated ? "/admin/inboxes" : "/admin/login", { replace: true });
 			return;
 		}
 		if (!session.authenticated) {

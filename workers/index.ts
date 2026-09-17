@@ -123,7 +123,7 @@ app.get("/api/v1/config", async (c) => {
 
 // -- Mailboxes ------------------------------------------------------
 
-app.get("/api/v1/mailboxes", async (c) => {
+app.get("/api/v1/mailboxes", async (c: AppContext) => {
 	const principal = await getAuthPrincipal(c as any);
 	if (!principal) return c.json({ error: "Unauthorized" }, 401);
 	const tenant = resolveTenant(c.req.header("host"), c.env);
@@ -132,13 +132,29 @@ app.get("/api/v1/mailboxes", async (c) => {
 		return c.json([{ id: email, email, name: email }]);
 	}
 	const allMailboxes = await listMailboxes(c.env.BUCKET);
+	const mailboxMap = new Map<string, { id: string; email: string; name: string }>();
+	for (const m of allMailboxes) {
+		mailboxMap.set(m.id.toLowerCase(), { ...m, name: m.id });
+	}
+	try {
+		const rows = await c.env.AUTH_DB.prepare("SELECT email FROM user_accounts WHERE is_active = 1").all<{ email: string }>();
+		for (const r of rows.results || []) {
+			const email = r.email.toLowerCase();
+			if (!mailboxMap.has(email)) {
+				mailboxMap.set(email, { id: email, email, name: email });
+			}
+		}
+	} catch {
+		// Ignore if table query fails
+	}
+	const merged = Array.from(mailboxMap.values());
 	const visible = tenant.kind === "domain"
-		? allMailboxes.filter((m) => mailboxDomain(m.id) === tenant.domain)
-		: allMailboxes;
-	return c.json(visible.map((m) => ({ ...m, name: m.id })));
+		? merged.filter((m) => mailboxDomain(m.id) === tenant.domain)
+		: merged;
+	return c.json(visible);
 });
 
-app.post("/api/v1/mailboxes", async (c) => {
+app.post("/api/v1/mailboxes", async (c: AppContext) => {
 	const principal = await getAuthPrincipal(c as any);
 	if (!principal) return c.json({ error: "Unauthorized" }, 401);
 	if (principal.realm !== "admin") {
@@ -165,13 +181,16 @@ app.post("/api/v1/mailboxes", async (c) => {
 	return c.json({ id: email, email, name, settings: finalSettings }, 201);
 });
 
-app.get("/api/v1/mailboxes/:mailboxId", async (c) => {
+app.get("/api/v1/mailboxes/:mailboxId", async (c: any): Promise<Response> => {
 	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
 	if (!(await canAccessMailbox(c as any, mailboxId))) return c.json({ error: "Forbidden" }, 403);
 	const obj = await c.env.BUCKET.get(`mailboxes/${mailboxId}.json`);
 	if (!obj) {
 		const principal = await getAuthPrincipal(c as any);
-		if (principal?.realm === "user" && principal.email.toLowerCase() === mailboxId.toLowerCase()) {
+		if (
+			principal?.realm === "admin" ||
+			(principal?.realm === "user" && principal.email.toLowerCase() === mailboxId.toLowerCase())
+		) {
 			await ensureUserMailbox(c.env, mailboxId);
 			const created = await c.env.BUCKET.get(`mailboxes/${mailboxId}.json`);
 			if (created) {
