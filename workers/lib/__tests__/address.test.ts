@@ -36,9 +36,12 @@ describe("parseEmailDate", () => {
 describe("isSafeImageUrl", () => {
 	it("allows public https images and blocks private hosts", () => {
 		expect(isSafeImageUrl("https://cdn.example.com/pix.png")?.hostname).toBe("cdn.example.com");
+		expect(isSafeImageUrl("https://img.example.com/photo.jpg?size=large&w=800")?.hostname).toBe("img.example.com");
 		expect(isSafeImageUrl("http://127.0.0.1/x.png")).toBeNull();
 		expect(isSafeImageUrl("http://10.0.0.4/x.png")).toBeNull();
+		expect(isSafeImageUrl("http://localhost:8080/image.png")).toBeNull();
 		expect(isSafeImageUrl("file:///etc/passwd")).toBeNull();
+		expect(isSafeImageUrl("javascript:alert(1)")).toBeNull();
 	});
 });
 

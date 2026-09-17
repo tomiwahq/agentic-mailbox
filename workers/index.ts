@@ -97,6 +97,8 @@ app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
 app.use("/api/v1/*", async (c, next) => {
 	if (
 		c.req.path === "/api/v1/config" ||
+		c.req.path === "/api/v1/proxy-image" ||
+		c.req.path.endsWith("/proxy-image") ||
 		c.req.path.startsWith("/api/v1/auth/") ||
 		c.req.path.startsWith("/api/v1/admin/")
 	) {
@@ -421,27 +423,57 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	return new Response(obj.body, { headers });
 });
 
-app.get("/api/v1/mailboxes/:mailboxId/proxy-image", async (c: AppContext) => {
+async function handleProxyImage(c: AppContext) {
 	const raw = c.req.query("url");
 	if (!raw) return c.json({ error: "url is required" }, 400);
 	const target = isSafeImageUrl(raw);
 	if (!target) return c.json({ error: "Blocked url" }, 400);
-	const upstream = await fetch(target.toString(), {
-		headers: { Accept: "image/*" },
-		redirect: "manual",
-	});
-	const contentType = upstream.headers.get("content-type") || "";
-	if (!upstream.ok || !contentType.startsWith("image/") || contentType.includes("svg")) {
+
+	let currentUrl = target.toString();
+	let upstream: Response | null = null;
+	for (let i = 0; i < 3; i++) {
+		const safeTarget = isSafeImageUrl(currentUrl);
+		if (!safeTarget) return c.json({ error: "Blocked redirect url" }, 400);
+		const res = await fetch(safeTarget.toString(), {
+			headers: {
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+				Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+			},
+			redirect: "manual",
+		});
+		if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
+			try {
+				currentUrl = new URL(res.headers.get("location")!, safeTarget).toString();
+				continue;
+			} catch {
+				break;
+			}
+		}
+		upstream = res;
+		break;
+	}
+
+	if (!upstream || !upstream.ok) {
+		return c.json({ error: "Failed to fetch image" }, upstream ? (upstream.status as any) : 502);
+	}
+
+	const contentType = upstream.headers.get("content-type") || "image/jpeg";
+	if (contentType.includes("svg") || contentType.includes("html") || contentType.includes("javascript")) {
 		return c.json({ error: "Not an image" }, 415);
 	}
+
 	return new Response(upstream.body, {
 		headers: {
 			"Content-Type": contentType,
 			"X-Content-Type-Options": "nosniff",
-			"Cache-Control": "private, max-age=3600",
+			"Cache-Control": "public, max-age=86400",
+			"Access-Control-Allow-Origin": "*",
 		},
 	});
-});
+}
+
+app.get("/api/v1/mailboxes/:mailboxId/proxy-image", handleProxyImage);
+app.get("/api/v1/proxy-image", handleProxyImage);
 
 // -- Receive inbound email ------------------------------------------
 

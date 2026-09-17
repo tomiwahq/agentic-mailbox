@@ -184,13 +184,16 @@ export function rewriteInlineImages(
 	if (!body || !attachments?.length) return body;
 	let result = body;
 	for (const att of attachments) {
-		if (att.disposition === "inline" && att.content_id) {
+		if (att.content_id) {
 			const url = `/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${att.id}`;
 			// Strip angle brackets from content_id if present
 			const cid = att.content_id.startsWith("<")
 				? att.content_id.slice(1, -1)
 				: att.content_id;
-			result = result.replace(new RegExp(`cid:${cid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi"), url);
+			result = result.replace(
+				new RegExp(`cid:${cid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi"),
+				url,
+			);
 		}
 	}
 	return result;
@@ -203,7 +206,11 @@ export function rewriteRemoteImages(body: string, mailboxId: string, loadRemote:
 		/(\s(?:src|background)=["'])(https?:\/\/[^"']+)(["'])/gi,
 		(_match, pre: string, url: string, post: string) => {
 			if (!loadRemote) return `${pre}${post}`;
-			return `${pre}/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/proxy-image?url=${encodeURIComponent(url)}${post}`;
+			const cleanUrl = url.replace(/&amp;/g, "&");
+			const proxyUrl = mailboxId
+				? `/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/proxy-image?url=${encodeURIComponent(cleanUrl)}`
+				: `/api/v1/proxy-image?url=${encodeURIComponent(cleanUrl)}`;
+			return `${pre}${proxyUrl}${post}`;
 		},
 	);
 }

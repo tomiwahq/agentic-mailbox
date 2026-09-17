@@ -58,48 +58,101 @@ export default function EmailIframe({ body, mailboxId, loadRemoteImages = false,
 		return () => window.removeEventListener("message", handleMessage);
 	}, [handleMessage]);
 
+	const blobUrlsRef = useRef<string[]>([]);
+
 	useEffect(() => {
+		let cancelled = false;
 		const iframe = iframeRef.current;
 		if (!iframe || !body) return;
 
-		const prepared = mailboxId
-			? rewriteRemoteImages(body, mailboxId, loadRemoteImages)
-			: loadRemoteImages
-				? body
-				: rewriteRemoteImages(body, "", false);
-		const cleanBody = DOMPurify.sanitize(prepared, {
-			USE_PROFILES: { html: true },
-			FORBID_TAGS: ["style"],
-			ADD_ATTR: ["target"],
-			FORCE_BODY: true,
-		});
+		// Clean up any previously created blob URLs
+		for (const u of blobUrlsRef.current) {
+			URL.revokeObjectURL(u);
+		}
+		blobUrlsRef.current = [];
 
-		const padding = autoSize ? "0" : "24px";
+		async function renderContent() {
+			let prepared = mailboxId
+				? rewriteRemoteImages(body, mailboxId, loadRemoteImages)
+				: loadRemoteImages
+					? body
+					: rewriteRemoteImages(body, "", false);
 
-		// Height-reporting script: sends body.scrollHeight to the parent.
-		// Runs inside the opaque-origin sandbox so it has zero access to
-		// the parent page — it can only postMessage.
-		const heightScript = autoSize
-			? `<script>
-				function reportHeight() {
-					var h = document.body.scrollHeight;
-					if (h > 0) parent.postMessage({ __emailIframeHeight: true, height: h }, "*");
+			// Find any attachment URLs: /api/v1/mailboxes/.../attachments/...
+			const attachmentMatches = prepared.match(
+				/\/api\/v1\/mailboxes\/[^"'\s)]+\/emails\/[^"'\s)]+\/attachments\/[^"'\s)]+/g,
+			);
+
+			if (attachmentMatches && attachmentMatches.length > 0) {
+				const uniqueUrls = Array.from(new Set(attachmentMatches));
+				const replacements = await Promise.all(
+					uniqueUrls.map(async (url) => {
+						try {
+							const res = await fetch(url);
+							if (res.ok) {
+								const blob = await res.blob();
+								const blobUrl = URL.createObjectURL(blob);
+								if (!cancelled) {
+									blobUrlsRef.current.push(blobUrl);
+								}
+								return { url, blobUrl };
+							}
+						} catch {
+							// fallback: leave url intact
+						}
+						return { url, blobUrl: url };
+					}),
+				);
+
+				if (cancelled) return;
+
+				for (const { url, blobUrl } of replacements) {
+					if (url !== blobUrl) {
+						prepared = prepared.replaceAll(url, blobUrl);
+					}
 				}
-				reportHeight();
-				setTimeout(reportHeight, 50);
-				setTimeout(reportHeight, 150);
-				setTimeout(reportHeight, 400);
-			<\/script>`
-			: "";
+			}
 
-		// Use srcdoc so the iframe is truly sandboxed (no same-origin access).
-		// We can't use doc.write() because that requires allow-same-origin.
-		iframe.srcdoc = `<!DOCTYPE html>
+			const cleanBody = DOMPurify.sanitize(prepared, {
+				USE_PROFILES: { html: true },
+				FORBID_TAGS: ["style"],
+				ADD_ATTR: ["target"],
+				FORCE_BODY: true,
+			});
+
+			const padding = autoSize ? "0" : "24px";
+			const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+			// Build CSP: if loadRemoteImages is true, allow https: and http:
+			const imgSources = loadRemoteImages
+				? `data: blob: cid: ${origin} https: http: 'self'`
+				: `data: blob: cid: ${origin} 'self'`;
+
+			const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src ${imgSources}; script-src 'unsafe-inline';`;
+
+			// Height-reporting script: sends body.scrollHeight to the parent.
+			// Runs inside the opaque-origin sandbox so it has zero access to
+			// the parent page — it can only postMessage.
+			const heightScript = autoSize
+				? `<script>
+					function reportHeight() {
+						var h = document.body.scrollHeight;
+						if (h > 0) parent.postMessage({ __emailIframeHeight: true, height: h }, "*");
+					}
+					reportHeight();
+					setTimeout(reportHeight, 50);
+					setTimeout(reportHeight, 150);
+					setTimeout(reportHeight, 400);
+				<\/script>`
+				: "";
+
+			if (iframe && !cancelled) {
+				iframe.srcdoc = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: cid: 'self'; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
 <style>
 * { box-sizing: border-box; }
 html {
@@ -145,6 +198,18 @@ ul, ol { padding-left: 20px; margin: 4px 0; }
 </head>
 <body>${cleanBody}${heightScript}</body>
 </html>`;
+			}
+		}
+
+		void renderContent();
+
+		return () => {
+			cancelled = true;
+			for (const u of blobUrlsRef.current) {
+				URL.revokeObjectURL(u);
+			}
+			blobUrlsRef.current = [];
+		};
 	}, [body, autoSize, mailboxId, loadRemoteImages]);
 
 	return (

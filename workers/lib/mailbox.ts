@@ -21,6 +21,7 @@ export type MailboxContext = {
 };
 
 export const requireMailbox = createMiddleware<MailboxContext>(async (c, next) => {
+	if (c.req.path.endsWith("/proxy-image")) return next();
 	const rawId = c.req.param("mailboxId");
 	if (!rawId) return c.json({ error: "Mailbox ID required" }, 400);
 	const mailboxId = decodeURIComponent(rawId);
