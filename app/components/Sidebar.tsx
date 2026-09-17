@@ -13,6 +13,7 @@ import {
 	PaperPlaneTiltIcon,
 	PencilSimpleIcon,
 	PlusIcon,
+	StackIcon,
 	TrashIcon,
 	TrayIcon,
 	WarningIcon,
@@ -114,7 +115,14 @@ export default function Sidebar() {
 		}
 	};
 
+	const isAllInboxes = mailboxId === "all";
+
+	const totalUnreadAll = useMemo(() => {
+		return allMailboxes.reduce((acc, m) => acc + (m.unreadCount || 0), 0);
+	}, [allMailboxes]);
+
 	const displayName = useMemo(() => {
+		if (isAllInboxes) return "All Inboxes";
 		if (!currentMailbox) return mailboxId?.split("@")[0] || "Mailbox";
 		// Prefer settings.fromName > name > local part of email
 		if (currentMailbox.settings?.fromName) {
@@ -125,7 +133,7 @@ export default function Sidebar() {
 		}
 		const fallbackStr = currentMailbox.email || currentMailbox.id || currentMailbox.name || mailboxId || "";
 		return (fallbackStr.includes("@") ? fallbackStr.split("@")[0] : fallbackStr) || currentMailbox.name || "Mailbox";
-	}, [currentMailbox, mailboxId]);
+	}, [currentMailbox, mailboxId, isAllInboxes]);
 
 	const handleNavClick = () => {
 		// Close mobile sidebar on navigation
@@ -167,18 +175,18 @@ export default function Sidebar() {
 									<span className="text-sm font-semibold text-kumo-default truncate">
 										{displayName}
 									</span>
-									{getUnreadCount(Folders.INBOX) > 0 && (
+									{(isAllInboxes ? totalUnreadAll : getUnreadCount(Folders.INBOX)) > 0 && (
 										<Badge
 											variant="primary"
 											className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
 										>
 											<EnvelopeSimpleIcon size={11} weight="fill" />
-											<span>{getUnreadCount(Folders.INBOX)}</span>
+											<span>{isAllInboxes ? totalUnreadAll : getUnreadCount(Folders.INBOX)}</span>
 										</Badge>
 									)}
 								</div>
 								<div className="text-xs text-kumo-subtle truncate mt-0.5">
-									{currentMailbox?.email || currentMailbox?.id || mailboxId}
+									{isAllInboxes ? "Unified cross-inbox view" : (currentMailbox?.email || currentMailbox?.id || mailboxId)}
 								</div>
 							</div>
 							<CaretUpDownIcon size={16} className="text-kumo-subtle shrink-0" />
@@ -194,6 +202,41 @@ export default function Sidebar() {
 									<div className="px-2 py-1 text-[11px] font-semibold text-kumo-subtle uppercase tracking-wider">
 										Switch Inbox ({allMailboxes.length})
 									</div>
+									<button
+										type="button"
+										onClick={() => {
+											setIsSwitcherOpen(false);
+											if (!isAllInboxes) {
+												navigate(mailboxInboxPath("all"));
+												closeSidebar();
+											}
+										}}
+										className={`w-full text-left px-2.5 py-2 rounded-lg text-xs truncate transition-colors flex items-center justify-between cursor-pointer ${
+											isAllInboxes
+												? "bg-kumo-fill font-semibold text-kumo-default"
+												: "text-kumo-default hover:bg-kumo-tint"
+										}`}
+									>
+										<div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+											<StackIcon size={14} className="shrink-0 text-kumo-brand" weight="bold" />
+											<span className="truncate font-medium">All Inboxes</span>
+											{totalUnreadAll > 0 && (
+												<Badge
+													variant="primary"
+													className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold"
+												>
+													<EnvelopeSimpleIcon size={11} weight="fill" />
+													<span>{totalUnreadAll}</span>
+												</Badge>
+											)}
+										</div>
+										{isAllInboxes && (
+											<span className="text-[10px] text-kumo-subtle ml-1 shrink-0 font-medium">
+												Current
+											</span>
+										)}
+									</button>
+									<div className="border-t border-kumo-line my-1" />
 									{allMailboxes.map((m) => {
 										const email = m?.email || m?.id || "";
 										if (!email) return null;

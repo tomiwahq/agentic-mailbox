@@ -15,6 +15,7 @@ export default [
 	route("admin", "routes/admin.tsx", [
 		index("routes/admin-overview.tsx"),
 		route("inboxes", "routes/admin-inboxes.tsx"),
+		route("feed", "routes/admin-feed.tsx"),
 		route("domains", "routes/admin-domains.tsx"),
 		route("mailboxes", "routes/admin-mailboxes.tsx"),
 	]),

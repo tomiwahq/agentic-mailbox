@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import type { AdminOverview, Email, Folder, Mailbox, SessionState } from "~/types";
+import type { AdminFeedResponse, AdminOverview, Email, Folder, Mailbox, SessionState } from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -124,6 +124,8 @@ const api = {
 	adminListUsers: () => get<Array<{ id: string; email: string; local_part: string; domain: string; is_active: boolean; created_at: string }>>("/api/v1/admin/users"),
 	lockUser: (id: string) => post<{ ok: boolean }>(`/api/v1/admin/users/${id}/lock`),
 	unlockUser: (id: string) => post<{ ok: boolean }>(`/api/v1/admin/users/${id}/unlock`),
+	adminFeed: (params?: Record<string, string>) =>
+		get<AdminFeedResponse>("/api/v1/admin/feed", { params }),
 
 	// Mailboxes
 	listMailboxes: () => get<Mailbox[]>("/api/v1/mailboxes"),

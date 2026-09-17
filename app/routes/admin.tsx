@@ -9,6 +9,7 @@ import { useSession } from "~/queries/session";
 const NAV = [
 	{ to: "/admin", label: "Overview", end: true },
 	{ to: "/admin/inboxes", label: "Inboxes" },
+	{ to: "/admin/feed", label: "Global Feed" },
 	{ to: "/admin/mailboxes", label: "Mailboxes & Users" },
 	{ to: "/admin/domains", label: "Domains" },
 ];

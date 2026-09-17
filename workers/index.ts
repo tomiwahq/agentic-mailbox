@@ -201,6 +201,9 @@ app.post("/api/v1/mailboxes", async (c: AppContext) => {
 app.get("/api/v1/mailboxes/:mailboxId", async (c: any): Promise<Response> => {
 	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
 	if (!(await canAccessMailbox(c as any, mailboxId))) return c.json({ error: "Forbidden" }, 403);
+	if (mailboxId === "all") {
+		return c.json({ id: "all", name: "All Inboxes", email: "all", settings: {} });
+	}
 	const obj = await c.env.BUCKET.get(`mailboxes/${mailboxId}.json`);
 	if (!obj) {
 		const principal = await getAuthPrincipal(c as any);
@@ -254,6 +257,7 @@ app.delete("/api/v1/mailboxes/:mailboxId", async (c) => {
 // -- Emails ---------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
 	const folder = c.req.query("folder");
 	const thread_id = c.req.query("thread_id");
 	const threaded = boolQuery(c, "threaded");
@@ -261,6 +265,41 @@ app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const limit = intQuery(c, "limit");
 	const sortColumn = c.req.query("sortColumn") as any;
 	const sortDirection = c.req.query("sortDirection") as "ASC" | "DESC" | undefined;
+
+	if (mailboxId === "all") {
+		const all = await listMailboxes(c.env.BUCKET);
+		const mailboxMap = new Map<string, string>();
+		for (const m of all) mailboxMap.set(m.id.toLowerCase(), m.id);
+		try {
+			const rows = await c.env.AUTH_DB.prepare("SELECT email FROM user_accounts").all<{ email: string }>();
+			for (const r of rows.results || []) {
+				const email = r.email.toLowerCase();
+				if (!mailboxMap.has(email)) mailboxMap.set(email, r.email);
+			}
+		} catch {}
+		const mailboxes = Array.from(mailboxMap.values());
+		const allEmails: any[] = [];
+		await Promise.all(
+			mailboxes.map(async (mId) => {
+				try {
+					const s = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(mId)) as any;
+					const list = await (threaded && folder
+						? s.getThreadedEmails({ folder, limit: 50 })
+						: s.getEmails({ folder, thread_id, limit: 50, sortColumn: sortColumn || "date", sortDirection: sortDirection || "DESC" }));
+					for (const item of list || []) {
+						item.mailboxId = mId;
+						allEmails.push(item);
+					}
+				} catch {}
+			}),
+		);
+		allEmails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+		const currentPage = page || 1;
+		const currentLimit = limit || 25;
+		const paged = allEmails.slice((currentPage - 1) * currentLimit, currentPage * currentLimit);
+		return c.json({ emails: paged, totalCount: allEmails.length });
+	}
+
 	const stub = c.var.mailboxStub;
 
 	if (threaded && folder) {
@@ -339,7 +378,34 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 });
 
 app.get("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
-	const email = await c.var.mailboxStub.getEmail(c.req.param("id")!);
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
+	const id = c.req.param("id")!;
+	if (mailboxId === "all") {
+		const targetMailbox = c.req.query("mailbox");
+		if (targetMailbox) {
+			try {
+				const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(targetMailbox)) as any;
+				const email = await stub.getEmail(id);
+				if (email) {
+					email.mailboxId = targetMailbox;
+					return new Response(JSON.stringify(email), { headers: { "Content-Type": "application/json" } });
+				}
+			} catch {}
+		}
+		const all = await listMailboxes(c.env.BUCKET);
+		for (const m of all) {
+			try {
+				const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(m.id)) as any;
+				const email = await stub.getEmail(id);
+				if (email) {
+					email.mailboxId = m.id;
+					return new Response(JSON.stringify(email), { headers: { "Content-Type": "application/json" } });
+				}
+			} catch {}
+		}
+		return c.json({ error: "Email not found" }, 404);
+	}
+	const email = await c.var.mailboxStub.getEmail(id);
 	if (!email) return c.json({ error: "Email not found" }, 404);
 	return new Response(JSON.stringify(email), {
 		headers: { "Content-Type": "application/json" },
@@ -347,8 +413,27 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
 });
 
 app.put("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
+	const id = c.req.param("id")!;
 	const { read, starred } = (await c.req.json()) as { read?: boolean; starred?: boolean };
-	const email = await c.var.mailboxStub.updateEmail(c.req.param("id")!, { read, starred });
+	let stub = c.var.mailboxStub;
+	if (mailboxId === "all") {
+		const targetMailbox = c.req.query("mailbox");
+		if (targetMailbox) {
+			stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(targetMailbox)) as any;
+		} else {
+			const all = await listMailboxes(c.env.BUCKET);
+			for (const m of all) {
+				try {
+					const s = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(m.id)) as any;
+					const em = await s.getEmail(id);
+					if (em) { stub = s; break; }
+				} catch {}
+			}
+		}
+		if (!stub) return c.json({ error: "Email not found" }, 404);
+	}
+	const email = await stub.updateEmail(id, { read, starred });
 	return email ? c.json(email) : c.json({ error: "Email not found" }, 404);
 });
 
@@ -369,11 +454,55 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/move", async (c: AppContext) =
 // -- Threads --------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/threads/:threadId", async (c: AppContext) => {
-	return c.json(await (c.var.mailboxStub as any).getThreadEmails(c.req.param("threadId")!));
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
+	const threadId = c.req.param("threadId")!;
+	if (mailboxId === "all") {
+		const targetMailbox = c.req.query("mailbox");
+		if (targetMailbox) {
+			try {
+				const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(targetMailbox)) as any;
+				const thread = await stub.getThreadEmails(threadId);
+				if (thread?.length) {
+					return c.json(thread.map((t: any) => ({ ...t, mailboxId: targetMailbox })));
+				}
+			} catch {}
+		}
+		const all = await listMailboxes(c.env.BUCKET);
+		for (const m of all) {
+			try {
+				const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(m.id)) as any;
+				const thread = await stub.getThreadEmails(threadId);
+				if (thread && thread.length > 0) {
+					return c.json(thread.map((t: any) => ({ ...t, mailboxId: m.id })));
+				}
+			} catch {}
+		}
+		return c.json([]);
+	}
+	return c.json(await (c.var.mailboxStub as any).getThreadEmails(threadId));
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/threads/:threadId/read", async (c: AppContext) => {
-	await c.var.mailboxStub.markThreadRead(c.req.param("threadId")!);
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
+	const threadId = c.req.param("threadId")!;
+	let stub = c.var.mailboxStub;
+	if (mailboxId === "all") {
+		const targetMailbox = c.req.query("mailbox");
+		if (targetMailbox) {
+			stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(targetMailbox)) as any;
+		} else {
+			const all = await listMailboxes(c.env.BUCKET);
+			for (const m of all) {
+				try {
+					const s = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(m.id)) as any;
+					const thread = await s.getThreadEmails(threadId);
+					if (thread?.length) { stub = s; break; }
+				} catch {}
+			}
+		}
+		if (!stub) return c.json({ status: "marked_read" });
+	}
+	await stub.markThreadRead(threadId);
 	return c.json({ status: "marked_read" });
 });
 
@@ -384,7 +513,41 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/forward", handleForwardEmail);
 
 // -- Folders --------------------------------------------------------
 
-app.get("/api/v1/mailboxes/:mailboxId/folders", async (c: AppContext) => c.json(await c.var.mailboxStub.getFolders()));
+app.get("/api/v1/mailboxes/:mailboxId/folders", async (c: AppContext) => {
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
+	if (mailboxId === "all") {
+		const all = await listMailboxes(c.env.BUCKET);
+		const mailboxMap = new Map<string, string>();
+		for (const m of all) mailboxMap.set(m.id.toLowerCase(), m.id);
+		try {
+			const rows = await c.env.AUTH_DB.prepare("SELECT email FROM user_accounts").all<{ email: string }>();
+			for (const r of rows.results || []) {
+				const email = r.email.toLowerCase();
+				if (!mailboxMap.has(email)) mailboxMap.set(email, r.email);
+			}
+		} catch {}
+		const mailboxes = Array.from(mailboxMap.values());
+		const systemFolders = [
+			{ id: Folders.INBOX, name: "Inbox", is_deletable: 0, unreadCount: 0 },
+			{ id: Folders.SENT, name: "Sent", is_deletable: 0, unreadCount: 0 },
+			{ id: Folders.DRAFT, name: "Drafts", is_deletable: 0, unreadCount: 0 },
+			{ id: Folders.ARCHIVE, name: "Archive", is_deletable: 0, unreadCount: 0 },
+			{ id: Folders.TRASH, name: "Trash", is_deletable: 0, unreadCount: 0 },
+			{ id: Folders.SPAM, name: "Spam", is_deletable: 0, unreadCount: 0 },
+		];
+		await Promise.all(
+			mailboxes.map(async (mId) => {
+				try {
+					const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(mId)) as any;
+					const count = await stub.getUnreadCount(Folders.INBOX);
+					systemFolders[0].unreadCount += count;
+				} catch {}
+			}),
+		);
+		return c.json(systemFolders);
+	}
+	return c.json(await c.var.mailboxStub.getFolders());
+});
 
 app.post("/api/v1/mailboxes/:mailboxId/folders", async (c: AppContext) => {
 	const { name } = (await c.req.json()) as { name: string };

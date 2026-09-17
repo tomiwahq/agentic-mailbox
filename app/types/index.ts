@@ -53,6 +53,20 @@ export interface Email {
 	needs_reply?: boolean;
 	has_draft?: boolean;
 	delivery_status?: "queued" | "sent" | "failed" | null;
+	mailboxId?: string;
+}
+
+export interface AdminFeedStats {
+	totalToday: number;
+	activeInboxesCount: number;
+	totalUnread: number;
+	deliverySuccessRate?: number;
+}
+
+export interface AdminFeedResponse {
+	emails: Email[];
+	totalCount: number;
+	stats: AdminFeedStats;
 }
 
 export interface Attachment {

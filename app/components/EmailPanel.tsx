@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useKumoToastManager } from "@cloudflare/kumo";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { Folders } from "shared/folders";
@@ -32,7 +33,8 @@ function EmailPanelSkeleton() {
 export default function EmailPanel({ emailId }: { emailId: string }) {
 	const { mailboxId, folder } = useParams<{ mailboxId: string; folder: string }>();
 	const { data: email } = useEmail(mailboxId, emailId) as { data?: Email };
-	const { data: threadRepliesRaw } = useThreadReplies(mailboxId, email?.thread_id) as {
+	const effectiveMailboxId = email?.mailboxId || mailboxId;
+	const { data: threadRepliesRaw } = useThreadReplies(effectiveMailboxId, email?.thread_id) as {
 		data?: Email[];
 	};
 	const updateEmail = useUpdateEmail();
@@ -40,8 +42,8 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 	const moveEmailMut = useMoveEmail();
 	const sendEmailMut = useSendEmail();
 	const replyMut = useReplyToEmail();
-	const { data: folders = [] } = useFolders(mailboxId) as { data?: Folder[] };
-	const { data: currentMailbox } = useMailbox(mailboxId) as {
+	const { data: folders = [] } = useFolders(effectiveMailboxId) as { data?: Folder[] };
+	const { data: currentMailbox } = useMailbox(effectiveMailboxId) as {
 		data?: Mailbox;
 	};
 	const { closePanel, startCompose } = useUIStore();
@@ -87,9 +89,9 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	if (!email) return <EmailPanelSkeleton />;
 
-	const toggleStar = () => { if (mailboxId) updateEmail.mutate({ mailboxId, id: email.id, data: { starred: !email.starred } }); };
-	const handleMove = (folderId: string) => { if (mailboxId) { moveEmailMut.mutate({ mailboxId, id: email.id, folderId }); closePanel(); } };
-	const handleDelete = () => { if (mailboxId) { if (!window.confirm("Are you sure you want to delete this email?")) return; deleteEmailMut.mutate({ mailboxId, id: email.id }); closePanel(); } };
+	const toggleStar = () => { if (effectiveMailboxId) updateEmail.mutate({ mailboxId: effectiveMailboxId, id: email.id, data: { starred: !email.starred } }); };
+	const handleMove = (folderId: string) => { if (effectiveMailboxId) { moveEmailMut.mutate({ mailboxId: effectiveMailboxId, id: email.id, folderId }); closePanel(); } };
+	const handleDelete = () => { if (effectiveMailboxId) { if (!window.confirm("Are you sure you want to delete this email?")) return; deleteEmailMut.mutate({ mailboxId: effectiveMailboxId, id: email.id }); closePanel(); } };
 
 	const handleEditDraft = (draftMsg?: Email) => {
 		const target = draftMsg || email;
@@ -99,19 +101,19 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	const handleDeleteDraft = async (draftMsg?: Email) => {
 		const target = draftMsg || email;
-		if (!mailboxId) return;
+		if (!effectiveMailboxId) return;
 		if (!window.confirm("Discard this draft?")) return;
-		deleteEmailMut.mutate({ mailboxId, id: target.id });
+		deleteEmailMut.mutate({ mailboxId: effectiveMailboxId, id: target.id });
 		toastManager.add({ title: "Draft discarded" });
 		if (target.id === emailId) closePanel();
 	};
 
 	const handleSendDraft = async (draftMsg?: Email) => {
 		let target = draftMsg || email;
-		if (!mailboxId || !currentMailbox) return;
+		if (!effectiveMailboxId || !currentMailbox) return;
 		setIsSending(true);
 		try {
-			if (!target.recipient || !target.subject) { try { const fresh = await api.getEmail(mailboxId, target.id) as Email; if (fresh) target = fresh; } catch {} }
+			if (!target.recipient || !target.subject) { try { const fresh = await api.getEmail(effectiveMailboxId, target.id) as Email; if (fresh) target = fresh; } catch {} }
 			if (!target.recipient) { toastManager.add({ title: "Cannot send: no recipient set on this draft.", variant: "error" }); return; }
 			const toRecipients = splitEmailList(target.recipient);
 			if (toRecipients.length === 0) { toastManager.add({ title: "Cannot send: no valid recipient set on this draft.", variant: "error" }); return; }
@@ -127,8 +129,8 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				html: target.body || "",
 				text: target.body ? target.body.replace(/<[^>]*>/g, "").trim() : "",
 			};
-			if (originalEmail) await replyMut.mutateAsync({ mailboxId, emailId: originalEmail.id, email: emailData }); else await sendEmailMut.mutateAsync({ mailboxId, email: emailData });
-			await deleteEmailMut.mutateAsync({ mailboxId, id: target.id });
+			if (originalEmail) await replyMut.mutateAsync({ mailboxId: effectiveMailboxId, emailId: originalEmail.id, email: emailData }); else await sendEmailMut.mutateAsync({ mailboxId: effectiveMailboxId, email: emailData });
+			await deleteEmailMut.mutateAsync({ mailboxId: effectiveMailboxId, id: target.id });
 			toastManager.add({ title: "Email sent!" });
 			if (isDraftFolder) closePanel();
 		} catch (err) {
@@ -141,9 +143,17 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	return (
 		<div className="flex flex-col h-full">
+			{mailboxId === "all" && effectiveMailboxId && (
+				<div className="flex items-center gap-2 px-4 py-2 bg-kumo-fill text-xs text-kumo-default border-b border-kumo-line shrink-0">
+					<EnvelopeSimpleIcon size={14} className="text-kumo-brand shrink-0" weight="fill" />
+					<span className="truncate">
+						Received at <strong className="font-semibold">{effectiveMailboxId}</strong> • Replies will send from <strong className="font-semibold">{effectiveMailboxId}</strong>
+					</span>
+				</div>
+			)}
 			<EmailPanelToolbar
 				email={email}
-				mailboxId={mailboxId}
+				mailboxId={effectiveMailboxId}
 				isDraftFolder={isDraftFolder}
 				isSending={isSending}
 				moveToFolders={moveToFolders}
@@ -162,9 +172,9 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				onForward={() => startCompose({ mode: "forward", originalEmail: email })}
 				onToggleStar={toggleStar}
 				onToggleRead={() => {
-					if (mailboxId) {
+					if (effectiveMailboxId) {
 						updateEmail.mutate({
-							mailboxId,
+							mailboxId: effectiveMailboxId,
 							id: email.id,
 							data: { read: !email.read },
 						});
@@ -189,7 +199,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 							<ThreadMessage
 								key={msg.id}
 								email={msg}
-								mailboxId={mailboxId}
+								mailboxId={effectiveMailboxId}
 								mailboxEmail={currentMailbox?.email}
 								isLast={idx === allMessages.length - 1}
 								isDraft={isDraft}
@@ -209,7 +219,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				) : (
 					<SingleMessageView
 						email={email}
-						mailboxId={mailboxId}
+						mailboxId={effectiveMailboxId}
 						onPreviewImage={(url, filename) =>
 							setPreviewImage({ url, filename })
 						}

@@ -30,6 +30,10 @@ export const requireMailbox = createMiddleware<MailboxContext>(async (c, next) =
 		return c.json({ error: "Forbidden" }, 403);
 	}
 
+	if (mailboxId === "all") {
+		return next();
+	}
+
 	const key = `mailboxes/${mailboxId}.json`;
 	let obj = await c.env.BUCKET.head(key);
 	if (!obj) {
