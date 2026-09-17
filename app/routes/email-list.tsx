@@ -266,12 +266,19 @@ export default function EmailListRoute() {
 		if (email.participants) {
 			const names = email.participants
 				.split(",")
-				.map((p) => p.trim().split("@")[0])
+				.map((p) => {
+					const trimmed = p.trim();
+					return trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
+				})
+				.filter(Boolean)
 				.filter((name, idx, arr) => arr.indexOf(name) === idx);
-			if (names.length <= 3) return names.join(", ");
-			return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
+			if (names.length > 0) {
+				if (names.length <= 3) return names.join(", ");
+				return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
+			}
 		}
-		return email.sender.split("@")[0];
+		const sender = email.sender || "";
+		return (sender.includes("@") ? sender.split("@")[0] : sender) || "Unknown";
 	};
 
 	return (

@@ -34,7 +34,7 @@ export default function LoginRoute() {
 	}, [session, navigate]);
 
 	async function goToInbox(email?: string) {
-		await queryClient.invalidateQueries({ queryKey: queryKeys.session() });
+		await queryClient.refetchQueries({ queryKey: queryKeys.session() });
 		navigate(mailboxInboxPath(email || `${localPart}@${domain}`), { replace: true });
 	}
 

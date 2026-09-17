@@ -2,6 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import { Loader } from "@cloudflare/kumo";
 import { useEffect, useRef } from "react";
 import { Outlet, useNavigate, useParams } from "react-router";
 import AgentSidebar from "~/components/AgentSidebar";
@@ -19,9 +20,10 @@ export default function MailboxRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
 	const navigate = useNavigate();
 	const { data: session, isLoading: sessionLoading } = useSession();
-	useMailbox(mailboxId);
-	useFolders(mailboxId);
-	useEmails(mailboxId, { folder: "inbox", page: "1", limit: "25" });
+	const isAuthenticated = Boolean(session?.authenticated);
+	useMailbox(isAuthenticated ? mailboxId : undefined);
+	useFolders(isAuthenticated ? mailboxId : undefined);
+	useEmails(isAuthenticated ? mailboxId : undefined, { folder: "inbox", page: "1", limit: "25" });
 	const prevMailboxIdRef = useRef<string | undefined>(undefined);
 	const {
 		isSidebarOpen,
@@ -59,6 +61,14 @@ export default function MailboxRoute() {
 
 		prevMailboxIdRef.current = mailboxId;
 	}, [mailboxId, closeComposeModal, closePanel, closeSidebar]);
+
+	if (sessionLoading || !session?.authenticated) {
+		return (
+			<div className="flex justify-center items-center h-screen bg-kumo-base">
+				<Loader size="lg" />
+			</div>
+		);
+	}
 
 	return (
 		<div className="flex h-screen overflow-hidden">

@@ -59,7 +59,7 @@ export default function AdminOverviewRoute() {
 					</Button>
 				</div>
 
-				{mailboxes.length === 0 ? (
+				{(!Array.isArray(mailboxes) || mailboxes.length === 0) ? (
 					<div className="py-8 text-center">
 						<TrayIcon size={32} weight="thin" className="text-kumo-subtle mx-auto mb-2" />
 						<p className="text-sm text-kumo-subtle">No mailboxes created yet.</p>
@@ -74,25 +74,30 @@ export default function AdminOverviewRoute() {
 					</div>
 				) : (
 					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-						{mailboxes.slice(0, 6).map((m) => (
-							<div
-								key={m.id}
-								className="flex items-center justify-between gap-3 p-3 rounded-lg border border-kumo-line bg-kumo-recessed/40 hover:bg-kumo-tint/50 transition-colors"
-							>
-								<div className="min-w-0 flex-1">
-									<div className="text-sm font-medium text-kumo-default truncate">{m.id}</div>
-									<div className="text-xs text-kumo-subtle truncate">@{m.id.split("@")[1]}</div>
-								</div>
-								<Button
-									size="sm"
-									variant="secondary"
-									icon={<ArrowSquareOutIcon size={14} />}
-									onClick={() => navigate(mailboxInboxPath(m.id))}
+						{mailboxes.slice(0, 6).map((m, idx) => {
+							const id = m?.email || m?.id || "";
+							if (!id) return null;
+							const domainPart = id.includes("@") ? id.split("@")[1] : "";
+							return (
+								<div
+									key={id || idx}
+									className="flex items-center justify-between gap-3 p-3 rounded-lg border border-kumo-line bg-kumo-recessed/40 hover:bg-kumo-tint/50 transition-colors"
 								>
-									Open
-								</Button>
-							</div>
-						))}
+									<div className="min-w-0 flex-1">
+										<div className="text-sm font-medium text-kumo-default truncate">{id}</div>
+										{domainPart && <div className="text-xs text-kumo-subtle truncate">@{domainPart}</div>}
+									</div>
+									<Button
+										size="sm"
+										variant="secondary"
+										icon={<ArrowSquareOutIcon size={14} />}
+										onClick={() => navigate(mailboxInboxPath(id))}
+									>
+										Open
+									</Button>
+								</div>
+							);
+						})}
 					</div>
 				)}
 			</div>

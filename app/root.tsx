@@ -127,6 +127,7 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: { error: unknown }) {
+	console.error("Root ErrorBoundary caught error:", error);
 	let title = "Something went wrong";
 	let description = "An unexpected error occurred. Please try again.";
 	let status: number | null = null;
@@ -141,8 +142,12 @@ export function ErrorBoundary({ error }: { error: unknown }) {
 			title = `Error ${error.status}`;
 			description = error.statusText || description;
 		}
-	} else if (error instanceof Error && import.meta.env.DEV) {
+	} else if (error instanceof Error) {
 		description = error.message;
+	} else if (typeof error === "string") {
+		description = error;
+	} else if (error && typeof error === "object" && "message" in error) {
+		description = String((error as any).message);
 	}
 
 	return (

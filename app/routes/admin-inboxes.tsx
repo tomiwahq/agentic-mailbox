@@ -31,18 +31,23 @@ export default function AdminInboxesRoute() {
 	const allMailboxes = useMemo(() => {
 		const map = new Map<string, { id: string; email: string; name?: string; isActive?: boolean }>();
 
-		for (const m of mailboxesQuery.data || []) {
-			const email = (m.email || m.id).toLowerCase();
+		const mailboxItems = Array.isArray(mailboxesQuery.data) ? mailboxesQuery.data : [];
+		for (const m of mailboxItems) {
+			const raw = m?.email || m?.id;
+			if (!raw) continue;
+			const email = String(raw).toLowerCase();
 			map.set(email, { id: email, email, name: m.name || email, isActive: true });
 		}
 
-		for (const u of usersQuery.data || []) {
-			const email = u.email.toLowerCase();
+		const userItems = Array.isArray(usersQuery.data) ? usersQuery.data : [];
+		for (const u of userItems) {
+			if (!u?.email) continue;
+			const email = String(u.email).toLowerCase();
 			const existing = map.get(email);
 			if (existing) {
 				existing.isActive = u.is_active;
 			} else {
-				map.set(email, { id: email, email, name: u.local_part, isActive: u.is_active });
+				map.set(email, { id: email, email, name: u.local_part || email, isActive: u.is_active });
 			}
 		}
 
@@ -51,6 +56,7 @@ export default function AdminInboxesRoute() {
 
 	const filteredMailboxes = useMemo(() => {
 		return allMailboxes.filter((m) => {
+			if (!m?.email) return false;
 			const matchesDomain =
 				selectedDomain === "all" || m.email.endsWith(`@${selectedDomain}`);
 			const matchesSearch =

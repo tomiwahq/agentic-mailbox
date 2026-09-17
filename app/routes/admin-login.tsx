@@ -24,7 +24,7 @@ export default function AdminLoginRoute() {
 		setError(null);
 		try {
 			await api.loginAdminPassword(email, password);
-			await queryClient.invalidateQueries({ queryKey: queryKeys.session() });
+			await queryClient.refetchQueries({ queryKey: queryKeys.session() });
 			navigate("/admin", { replace: true });
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Failed to login");
@@ -40,7 +40,7 @@ export default function AdminLoginRoute() {
 			const start = await api.startPasskeyLogin({ realm: "admin", adminEmail: email });
 			const response = await startAuthentication({ optionsJSON: start.options as any });
 			await api.verifyPasskeyLogin({ realm: "admin", accountId: start.accountId, response });
-			await queryClient.invalidateQueries({ queryKey: queryKeys.session() });
+			await queryClient.refetchQueries({ queryKey: queryKeys.session() });
 			navigate("/admin", { replace: true });
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Passkey login failed");

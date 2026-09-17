@@ -1,4 +1,4 @@
-import { Button } from "@cloudflare/kumo";
+import { Button, Loader } from "@cloudflare/kumo";
 import { TrayIcon } from "@phosphor-icons/react";
 import { Outlet, NavLink, useNavigate } from "react-router";
 import api from "~/services/api";
@@ -16,11 +16,19 @@ const NAV = [
 export default function AdminLayoutRoute() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const { data, isLoading } = useSession();
+	const { data, isLoading, isFetching } = useSession();
 	useEffect(() => {
-		if (isLoading) return;
+		if (isLoading || isFetching) return;
 		if (!data?.authenticated || data.principal?.realm !== "admin") navigate("/admin/login", { replace: true });
-	}, [data, isLoading, navigate]);
+	}, [data, isLoading, isFetching, navigate]);
+
+	if (isLoading || !data?.authenticated || data.principal?.realm !== "admin") {
+		return (
+			<div className="flex justify-center items-center min-h-screen bg-kumo-recessed">
+				<Loader size="lg" />
+			</div>
+		);
+	}
 	return (
 		<div className="min-h-screen bg-kumo-recessed">
 			<div className="mx-auto max-w-6xl px-4 py-6 md:px-6">

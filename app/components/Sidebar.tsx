@@ -122,7 +122,8 @@ export default function Sidebar() {
 		if (currentMailbox.name && currentMailbox.name !== currentMailbox.email) {
 			return currentMailbox.name;
 		}
-		return currentMailbox.email.split("@")[0] || currentMailbox.name;
+		const fallbackStr = currentMailbox.email || currentMailbox.id || currentMailbox.name || mailboxId || "";
+		return (fallbackStr.includes("@") ? fallbackStr.split("@")[0] : fallbackStr) || currentMailbox.name || "Mailbox";
 	}, [currentMailbox, mailboxId]);
 
 	const handleNavClick = () => {
@@ -165,7 +166,7 @@ export default function Sidebar() {
 									{displayName}
 								</div>
 								<div className="text-xs text-kumo-subtle truncate mt-0.5">
-									{currentMailbox?.email || mailboxId}
+									{currentMailbox?.email || currentMailbox?.id || mailboxId}
 								</div>
 							</div>
 							<CaretUpDownIcon size={16} className="text-kumo-subtle shrink-0" />
@@ -182,8 +183,9 @@ export default function Sidebar() {
 										Switch Inbox ({allMailboxes.length})
 									</div>
 									{allMailboxes.map((m) => {
-										const email = m.email || m.id;
-										const isCurrent = email.toLowerCase() === mailboxId?.toLowerCase();
+										const email = m?.email || m?.id || "";
+										if (!email) return null;
+										const isCurrent = mailboxId ? email.toLowerCase() === mailboxId.toLowerCase() : false;
 										return (
 											<button
 												key={m.id}
