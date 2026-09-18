@@ -43,13 +43,20 @@ function isAdminPassthroughPath(path: string) {
 		path.startsWith("/mcp") ||
 		path.startsWith("/agents/") ||
 		path.startsWith("/assets/") ||
+		path.startsWith("/__") ||
+		path.startsWith("/@") ||
 		/\.[a-z0-9]+$/i.test(path)
 	);
 }
 
 app.use("*", async (c, next) => {
 	const path = new URL(c.req.url).pathname;
-	if (path.startsWith("/assets/") || /\.[a-z0-9]+$/i.test(path)) {
+	if (
+		path.startsWith("/assets/") ||
+		path.startsWith("/__") ||
+		path.startsWith("/@") ||
+		/\.[a-z0-9]+$/i.test(path)
+	) {
 		return next();
 	}
 	await ensureAuthSchema(c.env);
