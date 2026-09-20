@@ -72,7 +72,7 @@ export default function ThreadMessage({
 }: ThreadMessageProps) {
 	const { data: mailbox } = useMailbox(mailboxId);
 	const [loadRemoteImages, setLoadRemoteImages] = useState<boolean | null>(null);
-	const showRemoteImages = loadRemoteImages ?? Boolean(mailbox?.settings?.loadRemoteImages);
+	const showRemoteImages = loadRemoteImages ?? mailbox?.settings?.loadRemoteImages !== false;
 	const isSelf = email.sender === mailboxEmail;
 	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : ""}`;
 	const senderLabel = isDraft ? "Draft reply" : isSelf ? "You" : email.sender;

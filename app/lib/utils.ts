@@ -185,8 +185,7 @@ export function rewriteInlineImages(
 	let result = body;
 	for (const att of attachments) {
 		if (att.content_id) {
-			const url = `/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${att.id}`;
-			// Strip angle brackets from content_id if present
+			const url = `/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/emails/${encodeURIComponent(emailId)}/attachments/${encodeURIComponent(att.id)}`;
 			const cid = att.content_id.startsWith("<")
 				? att.content_id.slice(1, -1)
 				: att.content_id;
@@ -199,20 +198,74 @@ export function rewriteInlineImages(
 	return result;
 }
 
+function normalizeRemoteImageUrl(url: string): string {
+	const clean = url.replace(/&amp;/g, "&").trim();
+	if (clean.startsWith("//")) return `https:${clean}`;
+	return clean;
+}
+
+export function proxyImageUrl(url: string, mailboxId?: string): string {
+	const cleanUrl = normalizeRemoteImageUrl(url);
+	return mailboxId
+		? `/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/proxy-image?url=${encodeURIComponent(cleanUrl)}`
+		: `/api/v1/proxy-image?url=${encodeURIComponent(cleanUrl)}`;
+}
+
+function rewriteRemoteUrl(url: string, mailboxId: string, loadRemote: boolean): string {
+	if (!loadRemote) return "";
+	return proxyImageUrl(url, mailboxId);
+}
+
 /** Strip remote images, or rewrite them through the Worker proxy. */
 export function rewriteRemoteImages(body: string, mailboxId: string, loadRemote: boolean): string {
 	if (!body) return body;
-	return body.replace(
-		/(\s(?:src|background)=["'])(https?:\/\/[^"']+)(["'])/gi,
-		(_match, pre: string, url: string, post: string) => {
+	let result = body.replace(
+		/(\s(?:src|data-src|background)=["'])((?:https?:)?\/\/[^"']+)(["'])/gi,
+		(_match, pre: string, url: string, post: string) =>
+			`${pre}${rewriteRemoteUrl(url, mailboxId, loadRemote)}${post}`,
+	);
+	result = result.replace(
+		/(\ssrcset=["'])([^"']+)(["'])/gi,
+		(_match, pre: string, value: string, post: string) => {
 			if (!loadRemote) return `${pre}${post}`;
-			const cleanUrl = url.replace(/&amp;/g, "&");
-			const proxyUrl = mailboxId
-				? `/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/proxy-image?url=${encodeURIComponent(cleanUrl)}`
-				: `/api/v1/proxy-image?url=${encodeURIComponent(cleanUrl)}`;
-			return `${pre}${proxyUrl}${post}`;
+			const rewritten = value.replace(/(?:https?:)?\/\/[^\s,]+/gi, (url) =>
+				proxyImageUrl(url, mailboxId),
+			);
+			return `${pre}${rewritten}${post}`;
 		},
 	);
+	result = result.replace(
+		/(url\()(["']?)((?:https?:)?\/\/[^"')]+)(\2)(\))/gi,
+		(_match, open: string, quote: string, url: string, _q: string, close: string) => {
+			if (!loadRemote) return `${open}${quote}${quote}${close}`;
+			return `${open}${quote}${proxyImageUrl(url, mailboxId)}${quote}${close}`;
+		},
+	);
+	return result;
+}
+
+/** Force email links to open in a new tab. */
+export function rewriteEmailLinks(html: string): string {
+	if (!html) return html;
+	return html.replace(/<a\b([^>]*)>/gi, (_match, attrs: string) => {
+		let next = attrs;
+		if (/\btarget\s*=/i.test(next)) {
+			next = next.replace(/\btarget\s*=\s*(['"]).*?\1/i, 'target="_blank"');
+		} else {
+			next += ' target="_blank"';
+		}
+		if (/\brel\s*=/i.test(next)) {
+			next = next.replace(/\brel\s*=\s*(['"])(.*?)\1/i, (_m, quote: string, value: string) => {
+				const parts = new Set(value.split(/\s+/).filter(Boolean));
+				parts.add("noopener");
+				parts.add("noreferrer");
+				return `rel=${quote}${[...parts].join(" ")}${quote}`;
+			});
+		} else {
+			next += ' rel="noopener noreferrer"';
+		}
+		return `<a${next}>`;
+	});
 }
 
 export function getNonInlineAttachments(attachments?: Attachment[]): Attachment[] {

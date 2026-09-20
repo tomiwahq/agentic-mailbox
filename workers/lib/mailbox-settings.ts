@@ -20,7 +20,7 @@ export const DEFAULT_MAILBOX_SETTINGS: MailboxSettings = {
 	autoReply: { enabled: false, subject: "", message: "" },
 	aliases: [],
 	autoDraft: true,
-	loadRemoteImages: false,
+	loadRemoteImages: true,
 };
 
 export async function getMailboxSettings(

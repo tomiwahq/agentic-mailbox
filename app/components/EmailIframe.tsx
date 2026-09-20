@@ -4,7 +4,7 @@
 
 import DOMPurify from "dompurify";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { rewriteRemoteImages } from "~/lib/utils";
+import { rewriteEmailLinks, rewriteRemoteImages } from "~/lib/utils";
 
 interface EmailIframeProps {
 	body: string;
@@ -30,7 +30,7 @@ interface EmailIframeProps {
  * - A strict CSP meta tag blocks external resource loads inside the
  *   iframe as a defense-in-depth layer.
  */
-export default function EmailIframe({ body, mailboxId, loadRemoteImages = false, autoSize }: EmailIframeProps) {
+export default function EmailIframe({ body, mailboxId, loadRemoteImages = true, autoSize }: EmailIframeProps) {
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [height, setHeight] = useState(autoSize ? 100 : 0);
 
@@ -72,58 +72,60 @@ export default function EmailIframe({ body, mailboxId, loadRemoteImages = false,
 		blobUrlsRef.current = [];
 
 		async function renderContent() {
-			let prepared = mailboxId
-				? rewriteRemoteImages(body, mailboxId, loadRemoteImages)
-				: loadRemoteImages
-					? body
-					: rewriteRemoteImages(body, "", false);
+			let prepared = rewriteRemoteImages(body, mailboxId || "", loadRemoteImages);
 
-			// Find any attachment URLs: /api/v1/mailboxes/.../attachments/...
-			const attachmentMatches = prepared.match(
-				/\/api\/v1\/mailboxes\/[^"'\s)]+\/emails\/[^"'\s)]+\/attachments\/[^"'\s)]+/g,
+			const apiMatches = prepared.match(
+				/\/api\/v1\/(?:mailboxes\/[^"'\s)]+\/(?:emails\/[^"'\s)]+\/attachments\/[^"'?\s)]+|proxy-image\?url=[^"'\s)]+)|proxy-image\?url=[^"'\s)]+)/g,
 			);
 
-			if (attachmentMatches && attachmentMatches.length > 0) {
-				const uniqueUrls = Array.from(new Set(attachmentMatches));
+			if (apiMatches && apiMatches.length > 0) {
+				const uniqueUrls = Array.from(new Set(apiMatches));
 				const replacements = await Promise.all(
 					uniqueUrls.map(async (url) => {
 						try {
 							const res = await fetch(url);
 							if (res.ok) {
 								const blob = await res.blob();
-								const blobUrl = URL.createObjectURL(blob);
-								if (!cancelled) {
-									blobUrlsRef.current.push(blobUrl);
+								if (!blob.type.startsWith("image/") && !url.includes("/attachments/")) {
+									throw new Error("not an image");
 								}
-								return { url, blobUrl };
+								const blobUrl = URL.createObjectURL(blob);
+								if (!cancelled) blobUrlsRef.current.push(blobUrl);
+								return { url, next: blobUrl };
 							}
 						} catch {
-							// fallback: leave url intact
+							// fall through
 						}
-						return { url, blobUrl: url };
+						if (url.includes("proxy-image?url=")) {
+							try {
+								const original = new URL(url, window.location.origin).searchParams.get("url");
+								if (original) return { url, next: original };
+							} catch {
+								// keep proxy url
+							}
+						}
+						return { url, next: url };
 					}),
 				);
 
 				if (cancelled) return;
 
-				for (const { url, blobUrl } of replacements) {
-					if (url !== blobUrl) {
-						prepared = prepared.replaceAll(url, blobUrl);
-					}
+				for (const { url, next } of replacements) {
+					if (url !== next) prepared = prepared.replaceAll(url, next);
 				}
 			}
 
-			const cleanBody = DOMPurify.sanitize(prepared, {
-				USE_PROFILES: { html: true },
-				FORBID_TAGS: ["style"],
-				ADD_ATTR: ["target"],
-				FORCE_BODY: true,
-			});
+			const cleanBody = rewriteEmailLinks(
+				DOMPurify.sanitize(prepared, {
+					USE_PROFILES: { html: true },
+					ADD_ATTR: ["target", "rel", "srcset"],
+					FORCE_BODY: true,
+				}),
+			);
 
 			const padding = autoSize ? "0" : "24px";
 			const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-			// Build CSP: if loadRemoteImages is true, allow https: and http:
 			const imgSources = loadRemoteImages
 				? `data: blob: cid: ${origin} https: http: 'self'`
 				: `data: blob: cid: ${origin} 'self'`;
@@ -133,9 +135,14 @@ export default function EmailIframe({ body, mailboxId, loadRemoteImages = false,
 			// Height-reporting script: sends body.scrollHeight to the parent.
 			// Runs inside the opaque-origin sandbox so it has zero access to
 			// the parent page — it can only postMessage.
-			const heightScript = autoSize
-				? `<script>
-					function reportHeight() {
+			const heightScript = `<script>
+					document.addEventListener("click", function (event) {
+						var link = event.target && event.target.closest ? event.target.closest("a") : null;
+						if (!link || !link.href) return;
+						link.setAttribute("target", "_blank");
+						link.setAttribute("rel", "noopener noreferrer");
+					}, true);
+					${autoSize ? `function reportHeight() {
 						var h = document.body.scrollHeight;
 						if (h > 0) parent.postMessage({ __emailIframeHeight: true, height: h }, "*");
 					}
@@ -143,8 +150,8 @@ export default function EmailIframe({ body, mailboxId, loadRemoteImages = false,
 					setTimeout(reportHeight, 50);
 					setTimeout(reportHeight, 150);
 					setTimeout(reportHeight, 400);
-				<\/script>`
-				: "";
+					window.addEventListener("load", reportHeight);` : ""}
+				<\/script>`;
 
 			if (iframe && !cancelled) {
 				iframe.srcdoc = `<!DOCTYPE html>
@@ -217,7 +224,7 @@ ul, ol { padding-left: 20px; margin: 4px 0; }
 			ref={iframeRef}
 			className="block w-full border-0"
 			style={autoSize ? { height: `${height}px` } : { height: "100%" }}
-			sandbox="allow-scripts allow-popups allow-top-navigation-by-user-activation"
+			sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
 			title="Email content"
 		/>
 	);

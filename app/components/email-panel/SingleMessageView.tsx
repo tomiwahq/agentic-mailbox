@@ -23,7 +23,7 @@ export default function SingleMessageView({
 }: SingleMessageViewProps) {
 	const { data: mailbox } = useMailbox(mailboxId);
 	const [loadRemoteImages, setLoadRemoteImages] = useState<boolean | null>(null);
-	const showRemoteImages = loadRemoteImages ?? Boolean(mailbox?.settings?.loadRemoteImages);
+	const showRemoteImages = loadRemoteImages ?? mailbox?.settings?.loadRemoteImages !== false;
 	return (
 		<div className="flex flex-col h-full">
 			<div className="px-4 py-4 border-b border-kumo-line md:px-6">

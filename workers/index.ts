@@ -594,10 +594,11 @@ app.get("/api/v1/mailboxes/:mailboxId/emails/:emailId/attachments/:attachmentId"
 	if (!obj) return c.json({ error: "Attachment file not found" }, 404);
 	const headers = new Headers();
 	const dangerous = /^(text\/html|image\/svg\+xml|text\/xml|application\/xhtml\+xml|text\/javascript|application\/javascript)/i.test(attachment.mimetype);
+	const isImage = /^image\//i.test(attachment.mimetype) && !dangerous;
 	headers.set("Content-Type", dangerous ? "application/octet-stream" : attachment.mimetype);
 	headers.set("X-Content-Type-Options", "nosniff");
 	const sanitized = attachment.filename.replace(/[\x00-\x1f"\\]/g, "_");
-	headers.set("Content-Disposition", `attachment; filename="${sanitized}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`);
+	headers.set("Content-Disposition", `${isImage ? "inline" : "attachment"}; filename="${sanitized}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`);
 	return new Response(obj.body, { headers });
 });
 
@@ -635,8 +636,15 @@ async function handleProxyImage(c: AppContext) {
 		return c.json({ error: "Failed to fetch image" }, upstream ? (upstream.status as any) : 502);
 	}
 
-	const contentType = upstream.headers.get("content-type") || "image/jpeg";
-	if (contentType.includes("svg") || contentType.includes("html") || contentType.includes("javascript")) {
+	const rawType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+	const contentType =
+		!rawType || rawType === "application/octet-stream" || rawType === "binary/octet-stream"
+			? "image/jpeg"
+			: rawType;
+	if (contentType.includes("svg") || contentType.includes("html") || contentType.includes("javascript") || contentType.startsWith("text/")) {
+		return c.json({ error: "Not an image" }, 415);
+	}
+	if (!contentType.startsWith("image/")) {
 		return c.json({ error: "Not an image" }, 415);
 	}
 

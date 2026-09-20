@@ -37,7 +37,7 @@ export default function SettingsRoute() {
 			setSignatureText(mailbox.settings?.signature?.text || "");
 			setAliases((mailbox.settings?.aliases || []).join(", "));
 			setAutoDraft(mailbox.settings?.autoDraft !== false);
-			setLoadRemoteImages(Boolean(mailbox.settings?.loadRemoteImages));
+			setLoadRemoteImages(mailbox.settings?.loadRemoteImages !== false);
 		}
 	}, [mailbox]);
 
